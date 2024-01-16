@@ -4,7 +4,7 @@ services:
     build: .
     container_name: lucos_creds
     ports: 
-      - "2202:22"
+      - "2202:2202"
     image: lucas42/lucos_creds
     volumes:
       - "store:/var/lib/creds_store/"

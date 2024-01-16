@@ -8,8 +8,7 @@ RUN go mod download
 COPY src .
 RUN go build
 
-FROM scratch
+ENV PORT=2202
+EXPOSE $PORT
 
-COPY --from=builder /go/src/lucos_creds/lucos_creds .
-
-CMD ["/lucos_creds"]
+CMD ["./lucos_creds"]
