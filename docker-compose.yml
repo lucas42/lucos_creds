@@ -1,0 +1,14 @@
+version: '3'
+services:
+  lucos_creds:
+    build: .
+    container_name: lucos_creds
+    ports: 
+      - "2202:22"
+    image: lucas42/lucos_creds
+    volumes:
+      - "store:/var/lib/creds_store/"
+    restart: always
+
+volumes:
+  store:
