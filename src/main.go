@@ -70,14 +70,8 @@ func getCreatePrivateKey() (ssh.Signer) {
 	return privateKey
 }
 
-func acceptSshConnection(socket net.Listener, config *ssh.ServerConfig) {
-	slog.Debug("Accepting new connection from socket")
-	connection, err := socket.Accept()
-	if err != nil {
-		slog.Warn("Failed to accept connection from socket", slog.Any("error", err))
-		return
-	}
-
+func handleSshConnection(connection net.Conn, config *ssh.ServerConfig) {
+	slog.Debug("New connection received")
 	sshConnection, channels, requests, err := ssh.NewServerConn(connection, config)
 	if err != nil {
 		slog.Warn("Failed to create a new server connection", slog.Any("error", err))
@@ -121,7 +115,13 @@ func main() {
 	slog.Info("Listening for connections", "address", socket.Addr())
 
 	for {
-		// Handle each incoming connection in its own goroutine
-		go acceptSshConnection(socket, config)
+		slog.Debug("Awating new connection from socket")
+		connection, err := socket.Accept()
+		if err != nil {
+			slog.Warn("Failed to accept connection from socket", slog.Any("error", err))
+			continue
+		}
+		// Once a connection is received, handle it in its own goroutine
+		go handleSshConnection(connection, config)
 	}
 }
