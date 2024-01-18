@@ -82,8 +82,35 @@ func handleSshConnection(connection net.Conn, config *ssh.ServerConfig) {
 	go ssh.DiscardRequests(requests)
 
 	for newChannel := range channels {
+		// Only the session channel is relevant to SFTP.  Reject any other channel types
+		if newChannel.ChannelType() != "session" {
+			slog.Warn("Rejecting Unknown Channel Type", "channelType", newChannel.ChannelType())
+			newChannel.Reject(ssh.UnknownChannelType, "Unknown Channel Type")
+			continue
+		}
 		slog.Debug("Incoming channel", "channelType", newChannel.ChannelType())
-		// TODO: actually do some stuff here
+
+		channel, requests, err := newChannel.Accept()
+		if err != nil {
+			slog.Warn("Failed to Accept Channel", slog.Any("error", err))
+			continue
+		}
+		go func(reqs <-chan *ssh.Request) {
+			for req := range reqs {
+				if !req.WantReply {
+					continue
+				}
+				if (req.Type == "subsystem" && string(req.Payload[4:]) == "sftp") {
+					slog.Debug("Accepting request for subsystem sftp", "RequestType", req.Type, "Payload", req.Payload[4:])
+					req.Reply(true, nil) // payload is ignored for replies to channel-specific requests, so just pass nil
+				} else {
+					slog.Warn("Rejecting request for non-sftp", "RequestType", req.Type, "Payload", req.Payload)
+					req.Reply(false, nil)
+				}
+			}
+		}(requests)
+
+		slog.Debug("//TODO: something with this channel", "channel", channel)
 	}
 }
 
