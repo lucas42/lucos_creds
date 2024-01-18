@@ -9,6 +9,8 @@ services:
     volumes:
       - "store:/var/lib/creds_store/"
     restart: always
+    environment:
+      - DEBUG=true
 
 volumes:
   store:
