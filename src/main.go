@@ -3,7 +3,10 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/binary"
 	"encoding/pem"
+	"errors"
+	"fmt"
 	"log/slog"
 	"net"
 	"os"
@@ -72,25 +75,26 @@ func getCreatePrivateKey() (ssh.Signer) {
 
 func handleSshConnection(connection net.Conn, config *ssh.ServerConfig) {
 	slog.Debug("New connection received")
-	sshConnection, channels, requests, err := ssh.NewServerConn(connection, config)
+	sshConnection, channels, globalRequests, err := ssh.NewServerConn(connection, config)
 	if err != nil {
 		slog.Warn("Failed to create a new server connection", slog.Any("error", err))
 		return
 	}
 	slog.Debug("Login", "user", sshConnection.User())
 
-	go ssh.DiscardRequests(requests)
+	go ssh.DiscardRequests(globalRequests) // Discard Keep Alive requests
 
 	for newChannel := range channels {
+
 		// Only the session channel is relevant to SFTP.  Reject any other channel types
 		if newChannel.ChannelType() != "session" {
 			slog.Warn("Rejecting Unknown Channel Type", "channelType", newChannel.ChannelType())
 			newChannel.Reject(ssh.UnknownChannelType, "Unknown Channel Type")
 			continue
 		}
-		slog.Debug("Incoming channel", "channelType", newChannel.ChannelType())
+		slog.Debug("Incoming channel", "channelType", newChannel.ChannelType(), "extraData", newChannel.ExtraData())
 
-		channel, requests, err := newChannel.Accept()
+		channel, channelRequests, err := newChannel.Accept()
 		if err != nil {
 			slog.Warn("Failed to Accept Channel", slog.Any("error", err))
 			continue
@@ -102,16 +106,90 @@ func handleSshConnection(connection net.Conn, config *ssh.ServerConfig) {
 				}
 				if (req.Type == "subsystem" && string(req.Payload[4:]) == "sftp") {
 					slog.Debug("Accepting request for subsystem sftp", "RequestType", req.Type, "Payload", req.Payload[4:])
-					req.Reply(true, nil) // payload is ignored for replies to channel-specific requests, so just pass nil
+					err = initSftpSubsystem(req, channel)
+					if err == nil {
+						req.Reply(true, nil) // payload is ignored for replies to channel-specific requests, so just pass nil
+					} else {
+						slog.Warn("Failed to initialise SFTP subsystem.  Rejecting request.", slog.Any("error", err))
+						req.Reply(false, nil)
+					}
 				} else {
 					slog.Warn("Rejecting request for non-sftp", "RequestType", req.Type, "Payload", req.Payload)
 					req.Reply(false, nil)
 				}
 			}
-		}(requests)
-
-		slog.Debug("//TODO: something with this channel", "channel", channel)
+		}(channelRequests)
 	}
+}
+
+/**
+ * Reads a single SFTP packet from an SSH channel
+ */
+func readPacket(channel ssh.Channel)(command byte, data []byte, err error) {
+
+	// First 4 bytes are a unsigned integer giving the length of the rest of the packet
+	lengthBytes := make([]byte, 4)
+	_, err = channel.Read(lengthBytes)
+	if err != nil {
+		return
+	}
+	length := binary.BigEndian.Uint32(lengthBytes)
+
+	// The next byte is the command being sent by the client
+	commandBytes := make([]byte, 1)
+	_, err = channel.Read(commandBytes)
+	if err != nil {
+		return
+	}
+	command = commandBytes[0]
+
+	// The remaining bytes are data for the command (subtract one from length as that's already been used for command)
+	data = make([]byte, length - 1)
+	_, err = channel.Read(data)
+	if err != nil {
+		return
+	}
+
+	slog.Debug("Packet Parsed", "length", length, "command", command, "data", data)
+	return
+}
+
+/**
+ * Writes a single SFTP packet to an SSH Channel
+ */
+func writePacket(channel ssh.Channel, command byte, data []byte) (err error) {
+	length := len(data) + 1
+	lengthBytes := make([]byte, 4)
+	binary.BigEndian.PutUint32(lengthBytes, uint32(length))
+	packetBytes := append(append(lengthBytes, command), data...)
+	_, err = channel.Write(packetBytes)
+	return
+}
+
+/**
+ * Recieves the INIT command from the client and checks for compatibility
+ * Replies with the VERSION command
+ */
+func initSftpSubsystem(request *ssh.Request, channel ssh.Channel) (err error) {
+
+	command, data, err := readPacket(channel)
+	if err != nil {
+		return
+	}
+	if command != 1 { // SSH_FXP_INIT should come first
+		err = errors.New("SSH_FXP_INIT wasn't first command received")
+		return
+	}
+	versionBytes := data[:4]
+	version := binary.BigEndian.Uint32(versionBytes)
+
+	if version != 3 { // Only supporting version 3 as that seems to be most common
+		err = errors.New(fmt.Sprintf("Server doesn't support SFTP version %d", version))
+		return
+	}
+
+	err = writePacket(channel, 2, versionBytes) // SSH_FXP_VERSION
+	return
 }
 
 func main() {
