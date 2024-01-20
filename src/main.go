@@ -106,9 +106,10 @@ func handleSshConnection(connection net.Conn, config *ssh.ServerConfig) {
 				}
 				if (req.Type == "subsystem" && string(req.Payload[4:]) == "sftp") {
 					slog.Debug("Accepting request for subsystem sftp", "RequestType", req.Type, "Payload", req.Payload[4:])
-					err = initSftpSubsystem(req, channel)
+					err = initSftpSubsystem(channel)
 					if err == nil {
 						req.Reply(true, nil) // payload is ignored for replies to channel-specific requests, so just pass nil
+						handlePackets(channel)
 					} else {
 						slog.Warn("Failed to initialise SFTP subsystem.  Rejecting request.", slog.Any("error", err))
 						req.Reply(false, nil)
@@ -156,8 +157,9 @@ func readPacket(channel ssh.Channel)(command byte, data []byte, err error) {
 
 /**
  * Writes a single SFTP packet to an SSH Channel
+ * (Doesn't handle request IDs, so can be used for SSH_FXP_VERSION)
  */
-func writePacket(channel ssh.Channel, command byte, data []byte) (err error) {
+func writeRawPacket(channel ssh.Channel, command byte, data []byte) (err error) {
 	length := len(data) + 1
 	lengthBytes := make([]byte, 4)
 	binary.BigEndian.PutUint32(lengthBytes, uint32(length))
@@ -165,12 +167,22 @@ func writePacket(channel ssh.Channel, command byte, data []byte) (err error) {
 	_, err = channel.Write(packetBytes)
 	return
 }
+/**
+ * Writes a single SFTP packet to an SSH Channel, adding the requestId to the start of the data
+ */
+func writePacket(channel ssh.Channel, requestId uint32, command byte, data []byte) (err error) {
+	requestIdBytes := make([]byte, 4)
+	binary.BigEndian.PutUint32(requestIdBytes, requestId)
+	data = append(requestIdBytes, data...)
+	err = writeRawPacket(channel, command, data)
+	return
+}
 
 /**
  * Recieves the INIT command from the client and checks for compatibility
  * Replies with the VERSION command
  */
-func initSftpSubsystem(request *ssh.Request, channel ssh.Channel) (err error) {
+func initSftpSubsystem(channel ssh.Channel) (err error) {
 
 	command, data, err := readPacket(channel)
 	if err != nil {
@@ -188,7 +200,118 @@ func initSftpSubsystem(request *ssh.Request, channel ssh.Channel) (err error) {
 		return
 	}
 
-	err = writePacket(channel, 2, versionBytes) // SSH_FXP_VERSION
+	err = writeRawPacket(channel, 2, versionBytes) // SSH_FXP_VERSION
+	return
+}
+
+/**
+ * Reads incoming SFTP packets from the client and responds appropriately
+ */
+func handlePackets(channel ssh.Channel) (err error) {
+	for {
+		var command byte
+		var data []byte
+		command, data, err = readPacket(channel)
+		if err != nil {
+			return
+		}
+		switch command {
+		case 3: // SSH_FXP_OPEN
+			requestId := binary.BigEndian.Uint32(data[:4])
+			pathlength := binary.BigEndian.Uint32(data[4:8])
+			path := string(data[8:(pathlength+8)])
+			pflags := binary.BigEndian.Uint32(data[(pathlength+8):(pathlength+12)])
+			if pflags != 0x00000001 { // Permission error if any pflag other than SSH_FXF_READ is set
+				err = errorAndCloseChannel(channel, requestId, 3, "Permission Denied") // SSH_FX_PERMISSION_DENIED
+				break
+			}
+			attrs := data[(pathlength+12):]
+			_, _, _, filepermissions, _, _ := parseFileAttributes(attrs)
+			slog.Debug("OPEN command", "requestId", requestId, "pathlength", pathlength, "path", path, "pflags", pflags, "filepermissions", filepermissions)
+			err = errorAndCloseChannel(channel, requestId, 2, "No Such File") // SSH_FX_NO_SUCH_FILE
+		case 7: // SSH_FXP_LSTAT
+			fallthrough // No need to differentiate between STAT and LSTAT as symbolic links aren't relevant here
+		case 17: // SSH_FXP_STAT
+			requestId := binary.BigEndian.Uint32(data[:4])
+			pathlength := binary.BigEndian.Uint32(data[4:8])
+			path := string(data[8:(pathlength+8)])
+			slog.Debug("STAT command", "requestId", requestId, "pathlength", pathlength, "path", path)
+			if (path != ".env") {
+				err = errorAndCloseChannel(channel, requestId, 2, "No Such File") // SSH_FX_NO_SUCH_FILE
+				break
+			}
+			attrBytes := make([]byte, 4)
+			binary.BigEndian.PutUint32(attrBytes, 0x00000000)
+			err = writePacket(channel, requestId, 105, attrBytes)// SSH_FXP_ATTRS
+		default:
+			slog.Warn("Unknown command", "command", command)
+			err = errors.New(fmt.Sprintf("Can't handle command %d", command))
+		}
+
+		if err != nil {
+			return
+		}
+	}
+}
+
+/**
+ * Writes a STATUS Packet back to the client
+ * (Assumes errorMessage is in English)
+ */
+func writeStatusPacket(channel ssh.Channel, requestId uint32, statusCode uint32, errorMessage string) (err error){
+	statusCodeBytes := make([]byte, 4)
+	binary.BigEndian.PutUint32(statusCodeBytes, statusCode)
+	languageTag := "en"
+
+	var data []byte
+	data = append(data, statusCodeBytes...)
+	data = append(data, []byte(errorMessage)...)
+	data = append(data, []byte(languageTag)...)
+
+	slog.Debug("Write Status Packed", "requestId", requestId, "statusCode", statusCode, "errorMessage", errorMessage)
+	err = writePacket(channel, requestId, 101, data) // SSH_FXP_STATUS
+	return
+}
+
+/**
+ * Writes a STATUS packet to the client and then closes the channel
+ */
+func errorAndCloseChannel(channel ssh.Channel, requestId uint32, statusCode uint32, errorMessage string) (err error) {
+	err = writeStatusPacket(channel, requestId, statusCode, errorMessage)
+	if err != nil {
+		return
+	}
+	slog.Debug("Closing Channel", "requestId", requestId)
+	err = channel.Close()
+	return
+}
+
+/**
+ * Parses encoded File Attributes
+ * (Ignores extended attrs)
+ */
+func parseFileAttributes(attrs []byte) (size uint64, uid uint32, gid uint32, permissions uint32, atime uint32, mtime uint32) {
+	flags := binary.BigEndian.Uint32(attrs[:4])
+	attrs = attrs[4:]
+	if flags & 0x00000001 != 0 {
+		size = binary.BigEndian.Uint64(attrs[:8])
+		attrs = attrs[8:]
+	}
+	if flags & 0x00000002 != 0 {
+		uid = binary.BigEndian.Uint32(attrs[:4])
+		gid = binary.BigEndian.Uint32(attrs[4:8])
+		attrs = attrs[8:]
+	}
+	if flags & 0x00000004 != 0 {
+		permissions = binary.BigEndian.Uint32(attrs[:4])
+		attrs = attrs[4:]
+	}
+	if flags & 0x00000008 != 0 {
+		atime = binary.BigEndian.Uint32(attrs[:4])
+		mtime = binary.BigEndian.Uint32(attrs[4:8])
+		attrs = attrs[8:]
+	}
+	slog.Debug("File Attributes", "size", size, "uid", uid, "gid", gid, "permissions", permissions, "atime", atime, "mtime", mtime)
 	return
 }
 
