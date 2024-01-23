@@ -343,7 +343,7 @@ func main() {
 	slog.Info("Listening for connections", "address", socket.Addr())
 
 	for {
-		slog.Debug("Awating new connection from socket")
+		slog.Debug("Awaiting new connection from socket")
 		connection, err := socket.Accept()
 		if err != nil {
 			slog.Warn("Failed to accept connection from socket", slog.Any("error", err))
