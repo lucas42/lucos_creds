@@ -25,4 +25,10 @@ Then, to view coverage report in browser, run:
 `go tool cover -html=coverage.out`
 
 ## Backing Up
-Copy the directory from the docker host at /var/lib/docker/volumes/lucos_creds_store/_data/
+Copy the directory from the docker host at /var/lib/docker/volumes/lucos\_creds\_store/\_data/
+
+
+## References
+
+* [Draft spec of SFTP that most stuff seems to support these days](https://datatracker.ietf.org/doc/html/draft-ietf-secsh-filexfer-02)
+* [Golang docs for built-in SSH package](https://pkg.go.dev/golang.org/x/crypto/ssh)
