@@ -163,7 +163,11 @@ func writeRawPacket(channel ssh.Channel, command byte, data []byte) (err error) 
 	length := len(data) + 1
 	lengthBytes := make([]byte, 4)
 	binary.BigEndian.PutUint32(lengthBytes, uint32(length))
-	packetBytes := append(append(lengthBytes, command), data...)
+	var packetBytes []byte
+	packetBytes = append(packetBytes, lengthBytes...)
+	packetBytes = append(packetBytes, command)
+	packetBytes = append(packetBytes, data...)
+	slog.Debug("Write packet", "command", command, "data", data, "packetBytes", packetBytes, "length", length, "lengthBytes", lengthBytes)
 	_, err = channel.Write(packetBytes)
 	return
 }
@@ -174,6 +178,7 @@ func writePacket(channel ssh.Channel, requestId uint32, command byte, data []byt
 	requestIdBytes := make([]byte, 4)
 	binary.BigEndian.PutUint32(requestIdBytes, requestId)
 	data = append(requestIdBytes, data...)
+	slog.Debug("write requestID", "requestId", requestId, "requestIdBytes", requestIdBytes)
 	err = writeRawPacket(channel, command, data)
 	return
 }
@@ -225,10 +230,57 @@ func handlePackets(channel ssh.Channel) (err error) {
 				err = errorAndCloseChannel(channel, requestId, 3, "Permission Denied") // SSH_FX_PERMISSION_DENIED
 				break
 			}
-			attrs := data[(pathlength+12):]
-			_, _, _, filepermissions, _, _ := parseFileAttributes(attrs)
-			slog.Debug("OPEN command", "requestId", requestId, "pathlength", pathlength, "path", path, "pflags", pflags, "filepermissions", filepermissions)
+			slog.Debug("OPEN command", "requestId", requestId, "pathlength", pathlength, "path", path, "pflags", pflags)
+
+			if (path == ".env") {
+				handle := "envhandle"
+				handleLength := len(handle)
+				handleLengthBytes := make([]byte, 4)
+				binary.BigEndian.PutUint32(handleLengthBytes, uint32(handleLength))
+				handleBytes := append(handleLengthBytes, []byte(handle)...)
+				err = writePacket(channel, requestId, 102, handleBytes) // SSH_FXP_HANDLE
+				break
+			}
+
 			err = errorAndCloseChannel(channel, requestId, 2, "No Such File") // SSH_FX_NO_SUCH_FILE
+		case 4: // SSH_FXP_CLOSE
+			requestId := binary.BigEndian.Uint32(data[:4])
+			handlelength := binary.BigEndian.Uint32(data[4:8])
+			handle := string(data[8:(handlelength+8)])
+			slog.Debug("CLOSE command", "requestId", requestId, "handlelength", handlelength, "handle", handle)
+			// No need to actually close anything.  Just return a success message
+			err = writeStatusPacket(channel, requestId, 0, "") // SSH_FX_OK
+			if err != nil {
+				return
+			}
+
+			_, err = channel.SendRequest("exit-status", false, []byte{0,0,0,0})
+			if err != nil {
+				return
+			}
+			channel.Close()
+		case 5: // SSH_FXP_READ
+			requestId := binary.BigEndian.Uint32(data[:4])
+			handlelength := binary.BigEndian.Uint32(data[4:8])
+			handle := string(data[8:(handlelength+8)])
+			offset := int(binary.BigEndian.Uint64(data[(handlelength+8):(handlelength+16)]))
+			maxLength := int(binary.BigEndian.Uint32(data[(handlelength+16):(handlelength+20)]))
+			slog.Debug("READ command", "requestId", requestId, "handlelength", handlelength, "handle", handle, "offset", offset, "maxLength", maxLength)
+			contents := "TEST_VAR=true\n"
+			contentsLength := len(contents)
+			if (offset >= contentsLength) {
+				err = writeStatusPacket(channel, requestId, 1, "End Of File") // SSH_FX_EOF
+				break
+			}
+			if (offset != 0 || maxLength < contentsLength) {
+				slog.Warn("requested subset of file - not implemented", "maxLength", maxLength, "offset", offset, "contentsLength", contentsLength)
+				err = errors.New("Reading subset of file not implemented")
+				break
+			}
+			contentsLengthBytes := make([]byte, 4)
+			binary.BigEndian.PutUint32(contentsLengthBytes, uint32(contentsLength))
+			contentsBytes := append(contentsLengthBytes, []byte(contents)...)
+			err = writePacket(channel, requestId, 103, contentsBytes) // SSH_FXP_DATA
 		case 7: // SSH_FXP_LSTAT
 			fallthrough // No need to differentiate between STAT and LSTAT as symbolic links aren't relevant here
 		case 17: // SSH_FXP_STAT
