@@ -367,25 +367,13 @@ func parseFileAttributes(attrs []byte) (size uint64, uid uint32, gid uint32, per
 	return
 }
 
-func main() {
-
-	// Check for DEBUG environment variable to drop the log level to Debug
-	if os.Getenv("DEBUG") != "" {
-		// Can be replaced with `slog.SetLogLoggerLevel(slog.LevelDebug)` in golang 1.22
-		slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug})))
-	}
+func startSftpServer(port string, serverPrivateKey ssh.Signer) {
 
 	config := &ssh.ServerConfig{
 		NoClientAuth: true,  // TODO: Implement some client authentication
 	}
 
-	config.AddHostKey(getCreatePrivateKey())
-
-	port := os.Getenv("PORT")
-	if port == "" {
-		slog.Error("Environment variable `PORT` not set")
-		os.Exit(2)
-	}
+	config.AddHostKey(serverPrivateKey)
 
 	socket, err := net.Listen("tcp", ":"+port)
 	if err != nil {
