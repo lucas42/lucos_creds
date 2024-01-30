@@ -109,7 +109,7 @@ func handleSshConnection(connection net.Conn, config *ssh.ServerConfig) {
 					err = initSftpSubsystem(channel)
 					if err == nil {
 						req.Reply(true, nil) // payload is ignored for replies to channel-specific requests, so just pass nil
-						handlePackets(channel)
+						handlePackets(channel, sshConnection.User())
 					} else {
 						slog.Warn("Failed to initialise SFTP subsystem.  Rejecting request.", slog.Any("error", err))
 						req.Reply(false, nil)
@@ -211,7 +211,7 @@ func initSftpSubsystem(channel ssh.Channel) (err error) {
 /**
  * Reads incoming SFTP packets from the client and responds appropriately
  */
-func handlePackets(channel ssh.Channel) (err error) {
+func handlePackets(channel ssh.Channel, user string) (err error) {
 	for {
 		var command byte
 		var data []byte
@@ -237,12 +237,17 @@ func handlePackets(channel ssh.Channel) (err error) {
 				break
 			}
 
-			if (request.Path == ".env") {
-				handleBytes := ssh.Marshal(struct {handle string}{"envhandle"})
-				err = writePacket(channel, request.Id, 102, handleBytes) // SSH_FXP_HANDLE
+			found, handle, handleErr := getHandle(user, request.Path)
+			if handleErr != nil {
+				err = handleErr
 				break
 			}
-			err = errorAndCloseChannel(channel, request.Id, 2, "No Such File") // SSH_FX_NO_SUCH_FILE
+			if !found {
+				err = errorAndCloseChannel(channel, request.Id, 2, "No Such File") // SSH_FX_NO_SUCH_FILE
+				break
+			}
+			handleBytes := ssh.Marshal(struct {handle string}{handle})
+			err = writePacket(channel, request.Id, 102, handleBytes) // SSH_FXP_HANDLE
 		case 4: // SSH_FXP_CLOSE
 			var request struct{
 				Id uint32
@@ -277,7 +282,15 @@ func handlePackets(channel ssh.Channel) (err error) {
 				break
 			}
 			slog.Debug("READ command", "request", request, slog.Any("error", err))
-			contents := "TEST_VAR=true\n"
+			found, contents, readErr := readFileByHandle(user, request.Handle)
+			if readErr != nil {
+				err = readErr
+				break
+			}
+			if !found {
+				err = errorAndCloseChannel(channel, request.Id, 2, "No Such Handle") // SSH_FX_NO_SUCH_FILE
+				break
+			}
 			if (int(request.Offset) >= len(contents)) {
 				err = writeStatusPacket(channel, request.Id, 1, "End Of File") // SSH_FX_EOF
 				break
