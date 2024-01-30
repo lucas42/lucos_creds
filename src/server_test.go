@@ -48,12 +48,12 @@ func TestReadEnvFile(test *testing.T) {
 	user := "bob"
 	testFileName := "test.env"
 	cmd := exec.Command(
-		"/usr/bin/scp", 
-		"-o BatchMode=yes", 
-		"-o StrictHostKeyChecking=no", 
-		"-o UserKnownHostsFile=/dev/null", 
-		"-P "+port, 
-		user+"@localhost:.env", 
+		"/usr/bin/scp",
+		"-o BatchMode=yes",
+		"-o StrictHostKeyChecking=no",
+		"-o UserKnownHostsFile=/dev/null",
+		"-P "+port,
+		user+"@localhost:.env",
 		testFileName, // would prefer to send straight to /dev/stdout, then read cmd.Output(), but that causes weird errors on my laptop
 	);
 	cmd.Stderr = os.Stderr
@@ -66,4 +66,25 @@ func TestReadEnvFile(test *testing.T) {
 	assertNoError(test, err)
 
 	assertEqual(test, "Unexpected .env contents", "TEST_VAR=\"true\"\n", string(contents))
+}
+func TestReadMissingFile(test *testing.T) {
+	port := "2223"
+	go startSftpServer(port, getPrivateKeyForTest(test))
+	user := "bob"
+	cmd := exec.Command(
+		"/usr/bin/scp",
+		"-o BatchMode=yes",
+		"-o StrictHostKeyChecking=no",
+		"-o UserKnownHostsFile=/dev/null",
+		"-P "+port,
+		user+"@localhost:unknown_file.txt",
+		"/dev/null", // would prefer to send straight to /dev/stdout, then read cmd.Output(), but that causes weird errors on my laptop
+	);
+	cmd.Stderr = os.Stderr
+	cmd.Stdout = os.Stderr
+	err := cmd.Run()
+	if err == nil {
+		test.Errorf("No error retured requesting missing file %s", err)
+	}
+	assertEqual(test, "Wrong error when requesting missing file", "exit status 1", err.Error())
 }
