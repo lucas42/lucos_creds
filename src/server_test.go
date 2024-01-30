@@ -65,5 +65,5 @@ func TestReadEnvFile(test *testing.T) {
 	err = os.Remove(testFileName)
 	assertNoError(test, err)
 
-	assertEqual(test, "Unexpected .env contents", "TEST_VAR=true\n", string(contents))
+	assertEqual(test, "Unexpected .env contents", "TEST_VAR=\"true\"\n", string(contents))
 }
