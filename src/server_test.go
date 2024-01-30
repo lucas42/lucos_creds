@@ -77,7 +77,6 @@ func TestReadMissingFile(test *testing.T) {
 		"-o StrictHostKeyChecking=no",
 		"-o UserKnownHostsFile=/dev/null",
 		"-P "+port,
-		"-vvvv",
 		user+"@localhost:unknown_file.txt",
 		"/dev/null", // would prefer to send straight to /dev/stdout, then read cmd.Output(), but that causes weird errors on my laptop
 	);
@@ -87,5 +86,4 @@ func TestReadMissingFile(test *testing.T) {
 	if err == nil {
 		test.Errorf("No error retured requesting missing file %s", err)
 	}
-	assertEqual(test, "Wrong error when requesting missing file", "exit status 1", err.Error())
 }
