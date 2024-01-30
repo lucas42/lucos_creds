@@ -314,7 +314,12 @@ func handlePackets(channel ssh.Channel, user string) (err error) {
 				break
 			}
 			slog.Debug("STAT command", "requestId", request.Id, "path", request.Path)
-			if (request.Path != ".env") {
+			found, _, handleErr := getHandle(user, request.Path)
+			if handleErr != nil {
+				err = handleErr
+				break
+			}
+			if !found {
 				err = errorAndCloseChannel(channel, request.Id, 2, "No Such File") // SSH_FX_NO_SUCH_FILE
 				break
 			}
