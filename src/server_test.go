@@ -36,6 +36,7 @@ func TestReadEnvFile(test *testing.T) {
 	serverSigner, _ := getKeyAndSigner(test)
 	clientSigner, clientPrivateKey := getKeyAndSigner(test)
 	_, closeServer := startSftpServer(port, serverSigner, map[string]ssh.PublicKey{user: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
+	defer closeServer()
 
 	privateKeyFile := "test.id_rsa"
 	err := os.WriteFile("test.id_rsa", clientPrivateKey, 0700)
@@ -63,7 +64,6 @@ func TestReadEnvFile(test *testing.T) {
 	assertNoError(test, err)
 
 	assertEqual(test, "Unexpected .env contents", "TEST_VAR=\"true\"\n", string(contents))
-	closeServer()
 }
 // Requests a file which isn't available on the server
 func TestReadMissingFile(test *testing.T) {
@@ -72,6 +72,7 @@ func TestReadMissingFile(test *testing.T) {
 	serverSigner, _ := getKeyAndSigner(test)
 	clientSigner, clientPrivateKey := getKeyAndSigner(test)
 	_, closeServer := startSftpServer(port, serverSigner, map[string]ssh.PublicKey{user: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
+	defer closeServer()
 
 	privateKeyFile := "test.id_rsa"
 	err := os.WriteFile("test.id_rsa", clientPrivateKey, 0700)
@@ -94,7 +95,6 @@ func TestReadMissingFile(test *testing.T) {
 	}
 	err = os.Remove(privateKeyFile)
 	assertNoError(test, err)
-	closeServer()
 }
 // Tries to log in as a user who isn't on the authorised list
 func TestInvalidUser(test *testing.T) {
@@ -103,6 +103,7 @@ func TestInvalidUser(test *testing.T) {
 	serverSigner, _ := getKeyAndSigner(test)
 	clientSigner, clientPrivateKey := getKeyAndSigner(test)
 	_, closeServer := startSftpServer(port, serverSigner, map[string]ssh.PublicKey{user: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
+	defer closeServer()
 
 	privateKeyFile := "test.id_rsa"
 	err := os.WriteFile("test.id_rsa", clientPrivateKey, 0700)
@@ -124,8 +125,6 @@ func TestInvalidUser(test *testing.T) {
 		test.Errorf("No error returned for invalid user %s", err)
 	}
 	err = os.Remove(privateKeyFile)
-	assertNoError(test, err)
-	closeServer()
 }
 // Tries to log in with a private key not linked to any authorised public key
 func TestWrongKey(test *testing.T) {
@@ -135,6 +134,7 @@ func TestWrongKey(test *testing.T) {
 	clientSigner, _ := getKeyAndSigner(test)
 	_, incorrectClientPrivateKey := getKeyAndSigner(test)
 	_, closeServer := startSftpServer(port, serverSigner, map[string]ssh.PublicKey{user: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
+	defer closeServer()
 
 	privateKeyFile := "test.id_rsa"
 	err := os.WriteFile("test.id_rsa", incorrectClientPrivateKey, 0700)
@@ -157,7 +157,6 @@ func TestWrongKey(test *testing.T) {
 	}
 	err = os.Remove(privateKeyFile)
 	assertNoError(test, err)
-	closeServer()
 }
 // Tries to log in as Bob, using Alice's private key
 func TestDifferentUsersKey(test *testing.T) {
@@ -166,6 +165,7 @@ func TestDifferentUsersKey(test *testing.T) {
 	aliceSigner, alicePrivateKey := getKeyAndSigner(test)
 	bobSigner, _ := getKeyAndSigner(test)
 	_, closeServer := startSftpServer(port, serverSigner, map[string]ssh.PublicKey{"alice": aliceSigner.PublicKey(), "bob": bobSigner.PublicKey()}, map[string]ssh.Permissions{})
+	defer closeServer()
 
 	privateKeyFile := "test.id_rsa"
 	err := os.WriteFile("test.id_rsa", alicePrivateKey, 0700)
@@ -188,5 +188,4 @@ func TestDifferentUsersKey(test *testing.T) {
 	}
 	err = os.Remove(privateKeyFile)
 	assertNoError(test, err)
-	closeServer()
 }
