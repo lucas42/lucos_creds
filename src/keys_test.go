@@ -65,3 +65,14 @@ func TestSavingKeyToDisk(test *testing.T) {
 	assertEqual(test, "different keys associated with signers from same file path", string(signer.PublicKey().Marshal()), string(secondSigner.PublicKey().Marshal()))
 
 }
+
+/**
+ * Tests that the authorized_keys file in the repo can be parsed without blowing up
+ * In future, might be worth a more thorough test of the parse function against various valid and invalid files.
+ * But for now, the only file the function is being run against is the one in the repo,
+ * so as long it works with that one, it'll do.
+ */
+func TestAuthorizedKeys(test *testing.T) {
+	keyMap := parseAuthorizedKeys("authorized_keys")
+	assertEqual(test, "Unexpected number of keys found in authorized_keys files", 2, len(keyMap))
+}
