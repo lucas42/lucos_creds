@@ -18,11 +18,11 @@ func main() {
 		slog.Error("Environment variable `PORT` not set")
 		os.Exit(2)
 	}
-	startSftpServer(
+	done, _ := startSftpServer(
 		port,
 		getCreateSshSigner("/var/lib/creds_store/id_rsa"),
 		parseAuthorizedKeys("authorized_keys"),
 		parseUserPermissions(),
 	)
-
+	<- done()
 }

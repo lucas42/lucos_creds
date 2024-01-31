@@ -1,5 +1,6 @@
 package main
 import (
+	"context"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -336,7 +337,7 @@ func parseFileAttributes(attrs []byte) (size uint64, uid uint32, gid uint32, per
 	return
 }
 
-func startSftpServer(port string, serverPrivateKey ssh.Signer, authorizedUsers map[string]ssh.PublicKey, userPermissions map[string]ssh.Permissions) {
+func startSftpServer(port string, serverPrivateKey ssh.Signer, authorizedUsers map[string]ssh.PublicKey, userPermissions map[string]ssh.Permissions) (done func() <-chan struct{}, cancel func()) {
 	config := &ssh.ServerConfig{
 		PublicKeyCallback: func(connectionMetadata ssh.ConnMetadata, publicKey ssh.PublicKey) (*ssh.Permissions, error) {
 			if authorizedUsers[connectionMetadata.User()] == nil {
@@ -349,22 +350,40 @@ func startSftpServer(port string, serverPrivateKey ssh.Signer, authorizedUsers m
 			return &permissions, nil
 		},
 	}
-
 	config.AddHostKey(serverPrivateKey)
 
-	socket, err := net.Listen("tcp", ":"+port)
+	ctx, cancel := context.WithCancel(context.Background())
+
+	var lc net.ListenConfig
+	listener, err := lc.Listen(ctx, "tcp", ":"+port)
 	if err != nil {
 		slog.Error("Failed to listen for connection", slog.Any("error", err))
 		os.Exit(3)
 	}
-	slog.Info("Listening for connections", "address", socket.Addr())
+	slog.Info("Listening for connections", "address", listener.Addr())
 
+	go func() {
+		<-ctx.Done()
+		slog.Debug("Shutting down SSH Server")
+		listener.Close()
+	}()
+	go acceptConnections(listener, ctx, config)
+	return ctx.Done, cancel
+}
+
+func acceptConnections(listener net.Listener, ctx context.Context, config *ssh.ServerConfig) {
 	for {
 		slog.Debug("Awaiting new connection from socket")
-		connection, err := socket.Accept()
+		connection, err := listener.Accept()
 		if err != nil {
-			slog.Warn("Failed to accept connection from socket", slog.Any("error", err))
-			continue
+			select {
+			case <-ctx.Done():
+				slog.Debug("Closing Server Cleanly")
+				return
+			default:
+				slog.Warn("Failed to accept connection from socket", slog.Any("error", err))
+				continue
+			}
 		}
 		// Once a connection is received, handle it in its own goroutine
 		go handleSshConnection(connection, config)
