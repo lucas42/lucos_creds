@@ -12,6 +12,11 @@ func assertEqual(test *testing.T, message string, expected interface{}, actual i
 		test.Errorf("%s. Expected: %s, Actual: %s", message, expected, actual)
 	}
 }
+func assertNotEqual(test *testing.T, message string, expected interface{}, actual interface{}) {
+	if expected == actual {
+		test.Errorf("%s. Expected: %s, Actual: %s", message, expected, actual)
+	}
+}
 func assertNoError(test *testing.T, err error) {
 	if err != nil {
 		test.Errorf("Error returned: %s", err)

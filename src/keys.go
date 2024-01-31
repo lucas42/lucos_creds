@@ -70,12 +70,12 @@ func generateKeyPair() (privateKeyBytes []byte, publicKeyBytes []byte, err error
 	)
 
 	// Encode public key
-	publicKeyBytes = pem.EncodeToMemory(
-		&pem.Block{
-			Type:  "RSA PUBLIC KEY",
-			Bytes: x509.MarshalPKCS1PublicKey(key.Public().(*rsa.PublicKey)),
-		},
-	)
+	publicKey, err := ssh.NewPublicKey(key.Public())
+	if err != nil {
+		return
+	}
+	publicKeyBytes = ssh.MarshalAuthorizedKey(publicKey)
+
 	return
 }
 
