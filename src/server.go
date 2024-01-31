@@ -400,10 +400,18 @@ func parseFileAttributes(attrs []byte) (size uint64, uid uint32, gid uint32, per
 	return
 }
 
-func startSftpServer(port string, serverPrivateKey ssh.Signer) {
-
+func startSftpServer(port string, serverPrivateKey ssh.Signer, authorizedUsers map[string]ssh.PublicKey, userPermissions map[string]ssh.Permissions) {
 	config := &ssh.ServerConfig{
-		NoClientAuth: true,  // TODO: Implement some client authentication
+		PublicKeyCallback: func(connectionMetadata ssh.ConnMetadata, publicKey ssh.PublicKey) (*ssh.Permissions, error) {
+			if authorizedUsers[connectionMetadata.User()] == nil {
+				return nil, fmt.Errorf("User %s not in auth list", connectionMetadata.User())
+			}
+			if string(authorizedUsers[connectionMetadata.User()].Marshal()) != string(publicKey.Marshal()) {
+				return nil, fmt.Errorf("Incorrect public key for %s", connectionMetadata.User())
+			}
+			permissions := userPermissions[connectionMetadata.User()]
+			return &permissions, nil
+		},
 	}
 
 	config.AddHostKey(serverPrivateKey)
