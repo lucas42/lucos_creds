@@ -22,7 +22,8 @@ func getCreateSshSigner(privateKeyPath string) (ssh.Signer) {
 	privateKeyBytes, err := os.ReadFile(privateKeyPath)
 	if err != nil {
 		slog.Warn("Failed to load private key, generating a new one")
-		privateKeyBytes, publicKeyBytes, err := generateKeyPair()
+		var publicKeyBytes []byte
+		privateKeyBytes, publicKeyBytes, err = generateKeyPair()
 		if err != nil {
 			slog.Error("Failed to generate RSA keypair", slog.Any("error", err))
 			os.Exit(4)
@@ -45,7 +46,7 @@ func getCreateSshSigner(privateKeyPath string) (ssh.Signer) {
 
 	signer, err := ssh.ParsePrivateKey(privateKeyBytes)
 	if err != nil {
-		slog.Error("Failed to parse private key", slog.Any("error", err))
+		slog.Error("Failed to parse private key", "privateKey", privateKeyBytes, slog.Any("error", err))
 		os.Exit(5)
 	}
 
