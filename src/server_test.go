@@ -35,7 +35,7 @@ func getKeyAndSigner(test *testing.T) (signer ssh.Signer, privateKeyBytes []byte
 	return
 }
 
-func TestReadEnvFile(test *testing.T) {
+func TestWriteReadEnvFile(test *testing.T) {
 	port := "2222"
 	user := "bob"
 	serverSigner, _ := getKeyAndSigner(test)
@@ -46,15 +46,46 @@ func TestReadEnvFile(test *testing.T) {
 	privateKeyFile := "test.id_rsa"
 	err := os.WriteFile("test.id_rsa", clientPrivateKey, 0700)
 	assertNoError(test, err)
-	testFileName := "test.env"
+
 	cmd := exec.Command(
+		"/usr/bin/ssh",
+		"-o BatchMode=yes",
+		"-o StrictHostKeyChecking=no",
+		"-o UserKnownHostsFile=/dev/null",
+		"-i"+privateKeyFile,
+		"-p "+port,
+		user+"@localhost",
+		"lucos_test/production/BORING_KEY=yellow",
+	)
+	cmd.Stderr = os.Stderr
+	cmd.Stdout = os.Stderr
+	err = cmd.Run()
+	assertNoError(test, err)
+
+	cmd = exec.Command(
+		"/usr/bin/ssh",
+		"-o BatchMode=yes",
+		"-o StrictHostKeyChecking=no",
+		"-o UserKnownHostsFile=/dev/null",
+		"-i"+privateKeyFile,
+		"-p "+port,
+		user+"@localhost",
+		"lucos_test/production/OTHERKEY=green",
+	)
+	cmd.Stderr = os.Stderr
+	cmd.Stdout = os.Stderr
+	err = cmd.Run()
+	assertNoError(test, err)
+
+	testFileName := "test.env"
+	cmd = exec.Command(
 		"/usr/bin/scp",
 		"-o BatchMode=yes",
 		"-o StrictHostKeyChecking=no",
 		"-o UserKnownHostsFile=/dev/null",
 		"-i"+privateKeyFile,
 		"-P "+port,
-		user+"@localhost:.env",
+		user+"@localhost:lucos_test/production/.env",
 		testFileName, // would prefer to send straight to /dev/stdout, then read cmd.Output(), but that causes weird errors on my laptop
 	);
 	cmd.Stderr = os.Stderr
@@ -68,7 +99,7 @@ func TestReadEnvFile(test *testing.T) {
 	err = os.Remove(privateKeyFile)
 	assertNoError(test, err)
 
-	assertEqual(test, "Unexpected .env contents", "TEST_VAR=\"true\"\n", string(contents))
+	assertEqual(test, "Unexpected .env contents", "BORING_KEY=\"yellow\"\nOTHERKEY=\"green\"\n", string(contents))
 }
 // Requests a file which isn't available on the server
 func TestReadMissingFile(test *testing.T) {

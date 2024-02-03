@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"strings"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -41,12 +42,45 @@ func handleSshConnection(connection net.Conn, config *ssh.ServerConfig) {
 				if !req.WantReply {
 					continue
 				}
-				if (req.Type == "subsystem" && string(req.Payload[4:]) == "sftp") {
+				var payload struct{
+					Data string
+				}
+				err = ssh.Unmarshal(req.Payload, &payload)
+				if err != nil {
+					slog.Warn("Can't Unmarshal request payload", "payload", req.Payload, slog.Any("error", err))
+					break
+				}
+				if (req.Type == "exec") {
+					payloadParts := strings.Split(payload.Data, "=")
+					isValid, system, environment, key := parseFileHandle(payloadParts[0])
+					if (len(payloadParts) != 2 || !isValid) {
+						slog.Warn("Invalid exec payload.  Rejecting request.", "payload", payload.Data, slog.Any("error", err))
+						req.Reply(false, nil)
+					} else {
+						value := payloadParts[1]
+						slog.Debug("Accepting exec request", "system", system, "environment", environment, "key", key, "value", "****")
+						req.Reply(true, nil) // payload is ignored for replies to channel-specific requests, so just pass nil
+						var exitStatus struct {
+							code uint32
+						}
+						err := updateCredential(system, environment, key, value)
+						if err != nil {
+							slog.Warn("Failed to update credential", slog.Any("error", err))
+						}
+
+						_, err = channel.SendRequest("exit-status", false, ssh.Marshal(exitStatus))
+						if err != nil {
+							slog.Warn("Couldn't send exit-status", slog.Any("error", err))
+						}
+						channel.Close()
+					}
+					req.Reply(false, nil)
+				} else if (req.Type == "subsystem" && payload.Data == "sftp") {
 					slog.Debug("Accepting request for subsystem sftp", "RequestType", req.Type, "Payload", req.Payload[4:])
 					err = initSftpSubsystem(channel)
 					if err == nil {
 						req.Reply(true, nil) // payload is ignored for replies to channel-specific requests, so just pass nil
-						handlePackets(channel, sshConnection.User())
+						handleSftpPackets(channel, sshConnection.User())
 					} else {
 						slog.Warn("Failed to initialise SFTP subsystem.  Rejecting request.", slog.Any("error", err))
 						req.Reply(false, nil)
@@ -148,7 +182,7 @@ func initSftpSubsystem(channel ssh.Channel) (err error) {
 /**
  * Reads incoming SFTP packets from the client and responds appropriately
  */
-func handlePackets(channel ssh.Channel, user string) (err error) {
+func handleSftpPackets(channel ssh.Channel, user string) (err error) {
 	for {
 		var command byte
 		var data []byte

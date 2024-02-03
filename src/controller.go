@@ -5,20 +5,10 @@ import (
 	"strings"
 )
 
-
 func getHandle(user string, path string) (found bool, handle string, err error) {
-	if (path == ".env") {
-		handle = "envhandle"
-		found = true
-		return
-	}
-	found = false
-	return
-}
-func readFileByHandle(user string, handle string) (found bool, contents string, err error) {
-	if handle == "envhandle" {
-		variables := map[string]string{"TEST_VAR": "true"}
-		contents = generateEnvFile(variables)
+	valid, _, _, filename := parseFileHandle(path)
+	if (valid && filename == ".env") {
+		handle = path
 		found = true
 		return
 	}
@@ -26,12 +16,37 @@ func readFileByHandle(user string, handle string) (found bool, contents string, 
 	return
 }
 
-func generateEnvFile(keyvalues map[string]string) (contents string) {
+func readFileByHandle(user string, handle string) (found bool, contents string, err error) {
+	valid, system, environment, filename := parseFileHandle(handle)
+	if (valid && filename == ".env") {
+		var credentials map[string]string
+		credentials, err = getAllCredentials(system, environment)
+		contents, err = generateEnvFile(credentials)
+		found = true
+		return
+	}
+	found = false
+	return
+}
+
+func generateEnvFile(keyvalues map[string]string) (contents string, err error) {
 	var builder strings.Builder
 	for key, value := range keyvalues {
 		escapedKey := strings.ReplaceAll(key, "=", "\\=")
 		escapedValue := strings.ReplaceAll(value, "\"", "\\\"")
 		fmt.Fprintf(&builder, "%s=\"%s\"\n", escapedKey, escapedValue)
 	}
-	return builder.String()
+	return builder.String(), nil
+}
+
+func parseFileHandle(handle string) (valid bool, system string, environment string, key string) {
+	subparts := strings.Split(handle, "/")
+	if len(subparts) != 3 {
+		return
+	}
+	valid = true
+	system = subparts[0]
+	environment = subparts[1]
+	key = subparts[2]
+	return
 }
