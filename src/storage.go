@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/cipher"
 	"crypto/rand"
+	"fmt"
 	"io"
 	"log/slog"
 	"github.com/jmoiron/sqlx"
@@ -17,16 +18,15 @@ import (
 type Datastore struct {
 	dataBlockCipher cipher.AEAD
 	db *sqlx.DB
-	allCredentials map[string]map[string]map[string]string
+	loganne LoganneInterface
 }
 
 
-func initDatastore(datastorePath string, dataKeyPath string) (Datastore) {
+func initDatastore(datastorePath string, dataKeyPath string, loganne LoganneInterface) (Datastore) {
 	dataBlockCipher := getCreateBlockCipher(dataKeyPath)
 
-
 	db := sqlx.MustConnect("sqlite3", datastorePath+"?_busy_timeout=10000")
-	datastore := Datastore{ dataBlockCipher, db, map[string]map[string]map[string]string{} }
+	datastore := Datastore{ dataBlockCipher, db, loganne }
 
 	datastore.db.MustExec("PRAGMA foreign_keys = ON;")
 	if !datastore.TableExists("credential") {
@@ -55,11 +55,11 @@ func (store Datastore) TableExists(tablename string) (found bool) {
 }
 
 type Credential struct {
-	System         string
-	Environment    string
-	Key            string
-	EncryptedValue []byte
-	PlainValue     string
+	System         string `json:"system"`
+	Environment    string `json:"environment"`
+	Key            string `json:"key"`
+	EncryptedValue []byte `json:"value_encrypted,omitempty"`
+	PlainValue     string `json:"value_plain,omitempty"`
 }
 
 func (credential *Credential) encrypt(dataBlockCipher cipher.AEAD) (err error) {
@@ -115,6 +115,8 @@ func (datastore Datastore) updateCredential(system string, environment string, k
 		return
 	}
 	slog.Info("Updated Credential", "credential", credential)
+	loganneMessage := fmt.Sprintf("Credential %s updated in %s (%s)", credential.Key, credential.System, credential.Environment)
+	datastore.loganne.post("credentialUpdated", loganneMessage, credential)
 	return
 }
 

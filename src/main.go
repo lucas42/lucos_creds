@@ -18,10 +18,15 @@ func main() {
 		slog.Error("Environment variable `PORT` not set")
 		os.Exit(2)
 	}
+
+	loganne := Loganne{
+		host: os.Getenv("LOGANNE_HOST"),
+		source: "lucos_creds",
+	}
 	done, _ := startSftpServer(
 		port,
 		getCreateSshSigner("/var/lib/creds_store/server_key"),
-		initDatastore("/var/lib/creds_store/creds.sqlite", "/var/lib/creds_store/data_key"),
+		initDatastore("/var/lib/creds_store/creds.sqlite", "/var/lib/creds_store/data_key", loganne),
 		parseAuthorizedKeys("authorized_keys"),
 		parseUserPermissions(),
 	)

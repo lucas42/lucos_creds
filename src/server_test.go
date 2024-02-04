@@ -45,7 +45,7 @@ func TestWriteReadEnvFile(test *testing.T) {
 	defer os.Remove(dataKeyPath)
 	serverSigner, _ := getKeyAndSigner(test)
 	clientSigner, clientPrivateKey := getKeyAndSigner(test)
-	_, closeServer := startSftpServer(port, serverSigner, initDatastore(datastorePath, dataKeyPath), map[string]ssh.PublicKey{user: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
+	_, closeServer := startSftpServer(port, serverSigner, initDatastore(datastorePath, dataKeyPath, MockLoganne{}), map[string]ssh.PublicKey{user: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
 	defer closeServer()
 
 	privateKeyFile := "test.id_eddsa"
@@ -116,7 +116,7 @@ func TestReadMissingFile(test *testing.T) {
 	defer os.Remove(dataKeyPath)
 	serverSigner, _ := getKeyAndSigner(test)
 	clientSigner, clientPrivateKey := getKeyAndSigner(test)
-	_, closeServer := startSftpServer(port, serverSigner, initDatastore(datastorePath, dataKeyPath), map[string]ssh.PublicKey{user: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
+	_, closeServer := startSftpServer(port, serverSigner, initDatastore(datastorePath, dataKeyPath, MockLoganne{}), map[string]ssh.PublicKey{user: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
 	defer closeServer()
 
 	privateKeyFile := "test.id_eddsa"
@@ -151,7 +151,7 @@ func TestInvalidUser(test *testing.T) {
 	defer os.Remove(dataKeyPath)
 	serverSigner, _ := getKeyAndSigner(test)
 	clientSigner, clientPrivateKey := getKeyAndSigner(test)
-	_, closeServer := startSftpServer(port, serverSigner, initDatastore(datastorePath, dataKeyPath), map[string]ssh.PublicKey{user: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
+	_, closeServer := startSftpServer(port, serverSigner, initDatastore(datastorePath, dataKeyPath, MockLoganne{}), map[string]ssh.PublicKey{user: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
 	defer closeServer()
 
 	privateKeyFile := "test.id_eddsa"
@@ -186,7 +186,7 @@ func TestWrongKey(test *testing.T) {
 	serverSigner, _ := getKeyAndSigner(test)
 	clientSigner, _ := getKeyAndSigner(test)
 	_, incorrectClientPrivateKey := getKeyAndSigner(test)
-	_, closeServer := startSftpServer(port, serverSigner, initDatastore(datastorePath, dataKeyPath), map[string]ssh.PublicKey{user: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
+	_, closeServer := startSftpServer(port, serverSigner, initDatastore(datastorePath, dataKeyPath, MockLoganne{}), map[string]ssh.PublicKey{user: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
 	defer closeServer()
 
 	privateKeyFile := "test.id_eddsa"
@@ -221,7 +221,7 @@ func TestDifferentUsersKey(test *testing.T) {
 	serverSigner, _ := getKeyAndSigner(test)
 	aliceSigner, alicePrivateKey := getKeyAndSigner(test)
 	bobSigner, _ := getKeyAndSigner(test)
-	_, closeServer := startSftpServer(port, serverSigner, initDatastore(datastorePath, dataKeyPath), map[string]ssh.PublicKey{"alice": aliceSigner.PublicKey(), "bob": bobSigner.PublicKey()}, map[string]ssh.Permissions{})
+	_, closeServer := startSftpServer(port, serverSigner, initDatastore(datastorePath, dataKeyPath, MockLoganne{}), map[string]ssh.PublicKey{"alice": aliceSigner.PublicKey(), "bob": bobSigner.PublicKey()}, map[string]ssh.Permissions{})
 	defer closeServer()
 
 	privateKeyFile := "test.id_eddsa"
@@ -256,7 +256,7 @@ func TestStatePersistsRestart(test *testing.T) {
 	defer os.Remove(datastorePath)
 	defer os.Remove(dataKeyPath)
 	clientSigner, clientPrivateKey := getKeyAndSigner(test)
-	_, closeFirstServer := startSftpServer(port, serverSigner, initDatastore(datastorePath, dataKeyPath), map[string]ssh.PublicKey{user: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
+	_, closeFirstServer := startSftpServer(port, serverSigner, initDatastore(datastorePath, dataKeyPath, MockLoganne{}), map[string]ssh.PublicKey{user: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
 
 	privateKeyFile := "test.id_eddsa"
 	err := os.WriteFile("test.id_eddsa", clientPrivateKey, 0700)
@@ -278,7 +278,7 @@ func TestStatePersistsRestart(test *testing.T) {
 	assertNoError(test, err)
 
 	closeFirstServer()
-	_, closeSecondServer := startSftpServer(port, serverSigner, initDatastore(datastorePath, dataKeyPath), map[string]ssh.PublicKey{user: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
+	_, closeSecondServer := startSftpServer(port, serverSigner, initDatastore(datastorePath, dataKeyPath, MockLoganne{}), map[string]ssh.PublicKey{user: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
 	defer closeSecondServer()
 
 	cmd = exec.Command(
