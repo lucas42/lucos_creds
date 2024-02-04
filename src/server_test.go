@@ -35,12 +35,20 @@ func getKeyAndSigner(test *testing.T) (signer ssh.Signer, privateKeyBytes []byte
 	return
 }
 
+func getTempDatastore(test *testing.T) (Datastore) {
+	datastorePath := "test_db.sqlite"
+	dataKeyPath := "test_data.key"
+	defer os.Remove(datastorePath)
+	defer os.Remove(dataKeyPath)
+	return initDatastore(datastorePath, dataKeyPath)
+}
+
 func TestWriteReadEnvFile(test *testing.T) {
 	port := "2222"
 	user := "bob"
 	serverSigner, _ := getKeyAndSigner(test)
 	clientSigner, clientPrivateKey := getKeyAndSigner(test)
-	_, closeServer := startSftpServer(port, serverSigner, map[string]ssh.PublicKey{user: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
+	_, closeServer := startSftpServer(port, serverSigner, getTempDatastore(test), map[string]ssh.PublicKey{user: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
 	defer closeServer()
 
 	privateKeyFile := "test.id_eddsa"
@@ -107,7 +115,7 @@ func TestReadMissingFile(test *testing.T) {
 	user := "bob"
 	serverSigner, _ := getKeyAndSigner(test)
 	clientSigner, clientPrivateKey := getKeyAndSigner(test)
-	_, closeServer := startSftpServer(port, serverSigner, map[string]ssh.PublicKey{user: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
+	_, closeServer := startSftpServer(port, serverSigner, getTempDatastore(test), map[string]ssh.PublicKey{user: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
 	defer closeServer()
 
 	privateKeyFile := "test.id_eddsa"
@@ -138,7 +146,7 @@ func TestInvalidUser(test *testing.T) {
 	user := "bob"
 	serverSigner, _ := getKeyAndSigner(test)
 	clientSigner, clientPrivateKey := getKeyAndSigner(test)
-	_, closeServer := startSftpServer(port, serverSigner, map[string]ssh.PublicKey{user: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
+	_, closeServer := startSftpServer(port, serverSigner, getTempDatastore(test), map[string]ssh.PublicKey{user: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
 	defer closeServer()
 
 	privateKeyFile := "test.id_eddsa"
@@ -169,7 +177,7 @@ func TestWrongKey(test *testing.T) {
 	serverSigner, _ := getKeyAndSigner(test)
 	clientSigner, _ := getKeyAndSigner(test)
 	_, incorrectClientPrivateKey := getKeyAndSigner(test)
-	_, closeServer := startSftpServer(port, serverSigner, map[string]ssh.PublicKey{user: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
+	_, closeServer := startSftpServer(port, serverSigner, getTempDatastore(test), map[string]ssh.PublicKey{user: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
 	defer closeServer()
 
 	privateKeyFile := "test.id_eddsa"
@@ -200,7 +208,7 @@ func TestDifferentUsersKey(test *testing.T) {
 	serverSigner, _ := getKeyAndSigner(test)
 	aliceSigner, alicePrivateKey := getKeyAndSigner(test)
 	bobSigner, _ := getKeyAndSigner(test)
-	_, closeServer := startSftpServer(port, serverSigner, map[string]ssh.PublicKey{"alice": aliceSigner.PublicKey(), "bob": bobSigner.PublicKey()}, map[string]ssh.Permissions{})
+	_, closeServer := startSftpServer(port, serverSigner, getTempDatastore(test), map[string]ssh.PublicKey{"alice": aliceSigner.PublicKey(), "bob": bobSigner.PublicKey()}, map[string]ssh.Permissions{})
 	defer closeServer()
 
 	privateKeyFile := "test.id_eddsa"

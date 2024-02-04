@@ -1,6 +1,8 @@
 package main
 import (
 	"crypto"
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/rand"
 	"crypto/ed25519"
 	"encoding/pem"
@@ -21,7 +23,7 @@ func getCreateSshSigner(privateKeyPath string) (ssh.Signer) {
 	publicKeyPath := privateKeyPath+".pub"
 	privateKeyBytes, err := os.ReadFile(privateKeyPath)
 	if err != nil {
-		slog.Warn("Failed to load private key, generating a new one")
+		slog.Warn("Failed to load private SSH key, generating a new one")
 		var publicKeyBytes []byte
 		privateKeyBytes, publicKeyBytes, err = generateKeyPair()
 		if err != nil {
@@ -32,21 +34,21 @@ func getCreateSshSigner(privateKeyPath string) (ssh.Signer) {
 		// Write private key to file
 		err = os.WriteFile(privateKeyPath, privateKeyBytes, 0700)
 		if err != nil {
-			slog.Error("Failed to write private key to filesystem", slog.Any("error", err))
+			slog.Error("Failed to write private SSH key to filesystem", slog.Any("error", err))
 			os.Exit(4)
 		}
 
 		// Write public key to file.
 		err = os.WriteFile(publicKeyPath, publicKeyBytes, 0755)
 		if err != nil {
-			slog.Error("Failed to write public key to filesystem", slog.Any("error", err))
+			slog.Error("Failed to write public SSH key to filesystem", slog.Any("error", err))
 			os.Exit(4)
 		}
 	}
 
 	signer, err := ssh.ParsePrivateKey(privateKeyBytes)
 	if err != nil {
-		slog.Error("Failed to parse private key", "privateKey", privateKeyBytes, slog.Any("error", err))
+		slog.Error("Failed to parse private SSH key", "privateKey", privateKeyBytes, slog.Any("error", err))
 		os.Exit(5)
 	}
 
@@ -77,6 +79,44 @@ func generateKeyPair() (privateKeyBytes []byte, publicKeyBytes []byte, err error
 	publicKeyBytes = ssh.MarshalAuthorizedKey(sshPublicKey)
 
 	return
+}
+
+/**
+ * Attempts to get a private cipher key from the mounted docker volume
+ * If that fails, a new one is generated and saved to the volume
+ *
+ * @returns cipher.AEAD
+ * (No errors are returned - instead any failures log and then exit.  Datastore won't work if this fails)
+ */
+func getCreateBlockCipher(keyPath string) (cipher.AEAD) {
+	keyBytes, err := os.ReadFile(keyPath)
+	if err != nil {
+		slog.Warn("Failed to load private cipher key, generating a new one")
+		keyBytes = make([]byte, 32)
+		_, err := rand.Read(keyBytes)
+		if err != nil {
+			slog.Error("Failed generate random cipher key", slog.Any("error", err))
+			os.Exit(6)
+		}
+
+		// Write private key to file
+		err = os.WriteFile(keyPath, keyBytes, 0700)
+		if err != nil {
+			slog.Error("Failed to write private cipher key to filesystem", slog.Any("error", err))
+			os.Exit(6)
+		}
+	}
+	block, err := aes.NewCipher(keyBytes)
+	if err != nil {
+		slog.Error("Failed to create AES cipher from key", slog.Any("error", err))
+		os.Exit(6)
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		slog.Error("Failed to cipher with Galois Counter Mode", slog.Any("error", err))
+		os.Exit(6)
+	}
+	return gcm
 }
 
 /**

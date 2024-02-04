@@ -11,7 +11,7 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-func handleSshConnection(connection net.Conn, config *ssh.ServerConfig) {
+func handleSshConnection(connection net.Conn, config *ssh.ServerConfig, datastore Datastore) {
 	slog.Debug("New connection received")
 	sshConnection, channels, globalRequests, err := ssh.NewServerConn(connection, config)
 	if err != nil {
@@ -63,7 +63,7 @@ func handleSshConnection(connection net.Conn, config *ssh.ServerConfig) {
 						var exitStatus struct {
 							code uint32
 						}
-						err := updateCredential(system, environment, key, value)
+						err := datastore.updateCredential(system, environment, key, value)
 						if err != nil {
 							slog.Warn("Failed to update credential", slog.Any("error", err))
 						}
@@ -80,7 +80,7 @@ func handleSshConnection(connection net.Conn, config *ssh.ServerConfig) {
 					err = initSftpSubsystem(channel)
 					if err == nil {
 						req.Reply(true, nil) // payload is ignored for replies to channel-specific requests, so just pass nil
-						handleSftpPackets(channel, sshConnection.User())
+						handleSftpPackets(channel, sshConnection.User(), datastore)
 					} else {
 						slog.Warn("Failed to initialise SFTP subsystem.  Rejecting request.", slog.Any("error", err))
 						req.Reply(false, nil)
@@ -137,7 +137,9 @@ func writeRawPacket(channel ssh.Channel, command byte, data []byte) (err error) 
 			append([]byte{command}, data...),
 		},
 	)
-	slog.Debug("Write packet", "command", command, "data", data)
+
+	// Don't log `data` here, as it may contain sensitive info
+	slog.Debug("Write packet", "command", command)
 	_, err = channel.Write(packetBytes)
 	return
 }
@@ -182,7 +184,7 @@ func initSftpSubsystem(channel ssh.Channel) (err error) {
 /**
  * Reads incoming SFTP packets from the client and responds appropriately
  */
-func handleSftpPackets(channel ssh.Channel, user string) (err error) {
+func handleSftpPackets(channel ssh.Channel, user string, datastore Datastore) (err error) {
 	for {
 		var command byte
 		var data []byte
@@ -253,7 +255,7 @@ func handleSftpPackets(channel ssh.Channel, user string) (err error) {
 				break
 			}
 			slog.Debug("READ command", "request", request, slog.Any("error", err))
-			found, contents, readErr := readFileByHandle(user, request.Handle)
+			found, contents, readErr := readFileByHandle(user, request.Handle, datastore)
 			if readErr != nil {
 				err = readErr
 				break
@@ -371,7 +373,7 @@ func parseFileAttributes(attrs []byte) (size uint64, uid uint32, gid uint32, per
 	return
 }
 
-func startSftpServer(port string, serverPrivateKey ssh.Signer, authorizedUsers map[string]ssh.PublicKey, userPermissions map[string]ssh.Permissions) (done func() <-chan struct{}, cancel func()) {
+func startSftpServer(port string, serverPrivateKey ssh.Signer, datastore Datastore, authorizedUsers map[string]ssh.PublicKey, userPermissions map[string]ssh.Permissions) (done func() <-chan struct{}, cancel func()) {
 	config := &ssh.ServerConfig{
 		PublicKeyCallback: func(connectionMetadata ssh.ConnMetadata, publicKey ssh.PublicKey) (*ssh.Permissions, error) {
 			if authorizedUsers[connectionMetadata.User()] == nil {
@@ -401,11 +403,11 @@ func startSftpServer(port string, serverPrivateKey ssh.Signer, authorizedUsers m
 		slog.Debug("Shutting down SSH Server")
 		listener.Close()
 	}()
-	go acceptConnections(listener, ctx, config)
+	go acceptConnections(listener, ctx, config, datastore)
 	return ctx.Done, cancel
 }
 
-func acceptConnections(listener net.Listener, ctx context.Context, config *ssh.ServerConfig) {
+func acceptConnections(listener net.Listener, ctx context.Context, config *ssh.ServerConfig, datastore Datastore) {
 	for {
 		slog.Debug("Awaiting new connection from socket")
 		connection, err := listener.Accept()
@@ -420,6 +422,6 @@ func acceptConnections(listener net.Listener, ctx context.Context, config *ssh.S
 			}
 		}
 		// Once a connection is received, handle it in its own goroutine
-		go handleSshConnection(connection, config)
+		go handleSshConnection(connection, config, datastore)
 	}
 }
