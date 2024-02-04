@@ -34,7 +34,7 @@ func TestKeyPairGeneration(test *testing.T) {
 	assertNotEqual(test, "Public keys have same marshalled value", string(publicKey.Marshal()), string(secondPublicKey.Marshal()))
 }
 
-func TestSavingKeyToDisk(test *testing.T) {
+func TestSavingSSHKeyToDisk(test *testing.T) {
 	filePath := "test.keys"
 	defer os.Remove(filePath)
 	defer os.Remove(filePath+".pub")
@@ -63,6 +63,32 @@ func TestSavingKeyToDisk(test *testing.T) {
 	// Create another signer.  This should have the same public key as the first
 	secondSigner := getCreateSshSigner(filePath)
 	assertEqual(test, "different keys associated with signers from same file path", string(signer.PublicKey().Marshal()), string(secondSigner.PublicKey().Marshal()))
+
+}
+func TestCreatingDataKey(test *testing.T) {
+	filePath := "test.data_key"
+	defer os.Remove(filePath)
+
+	// Ensure the file doesn't exist to begin with
+	os.Remove(filePath)
+
+
+	firstBlockCipher := getCreateBlockCipher(filePath)
+
+	// Check the file now exists
+	fileInfo, err := os.Lstat(filePath)
+	assertNoError(test, err)
+
+	// Make sure the permissions on the data key file are locked to just this user
+	assertEqual(test, "Incorrect permissions on private key", "-rwx------", fileInfo.Mode().String())
+
+	// Create another block cipher.  This should use the same key, so can decrypt something the first encrypted
+	secondBlockCipher := getCreateBlockCipher(filePath)
+	testCredential := Credential{PlainValue:"somereallysecretstuff"}
+	testCredential.encrypt(firstBlockCipher)
+	assertEqual(test, "encrypt function didn't blank plainvalue", "", testCredential.PlainValue)
+	testCredential.decrypt(secondBlockCipher)
+	assertEqual(test, "Decryption didn't get back to orginal plaintext", "somereallysecretstuff", testCredential.PlainValue)
 
 }
 
