@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"github.com/jmoiron/sqlx"
+	"strings"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -102,7 +103,7 @@ func (datastore Datastore) updateCredential(system string, environment string, k
 	credential := Credential{}
 	credential.System = system
 	credential.Environment = environment
-	credential.Key = key
+	credential.Key = strings.ToUpper(key) // Normalise all keys to only be uppercase
 	credential.PlainValue = rawValue
 	err = credential.encrypt(datastore.dataBlockCipher)
 	if err != nil {

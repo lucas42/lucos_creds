@@ -2,18 +2,19 @@ package main
 import (
 	"os"
 	"os/exec"
+	"reflect"
 	"runtime/debug"
 	"testing"
 	"golang.org/x/crypto/ssh"
 )
 
 func assertEqual(test *testing.T, message string, expected interface{}, actual interface{}) {
-	if expected != actual {
+	if !reflect.DeepEqual(expected, actual) {
 		test.Errorf("%s. Expected: %s, Actual: %s", message, expected, actual)
 	}
 }
 func assertNotEqual(test *testing.T, message string, expected interface{}, actual interface{}) {
-	if expected == actual {
+	if reflect.DeepEqual(expected, actual) {
 		test.Errorf("%s. Expected: %s, Actual: %s", message, expected, actual)
 	}
 }
