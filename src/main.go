@@ -20,7 +20,7 @@ func main() {
 	}
 	done, _ := startSftpServer(
 		port,
-		getCreateSshSigner("/var/lib/creds_store/id_rsa"),
+		getCreateSshSigner("/var/lib/creds_store/server_key"),
 		parseAuthorizedKeys("authorized_keys"),
 		parseUserPermissions(),
 	)

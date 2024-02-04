@@ -1,8 +1,8 @@
 package main
 import (
+	"crypto"
 	"crypto/rand"
-	"crypto/rsa"
-	"crypto/x509"
+	"crypto/ed25519"
 	"encoding/pem"
 	"log/slog"
 	"os"
@@ -11,7 +11,7 @@ import (
 )
 
 /**
- * Attempts to get a private RSA key from the mounted docker volume
+ * Attempts to get a private SSH key from the mounted docker volume
  * If that fails, a new public/private key pair is generated and saved to the volume
  *
  * @returns ssh.Signer
@@ -25,7 +25,7 @@ func getCreateSshSigner(privateKeyPath string) (ssh.Signer) {
 		var publicKeyBytes []byte
 		privateKeyBytes, publicKeyBytes, err = generateKeyPair()
 		if err != nil {
-			slog.Error("Failed to generate RSA keypair", slog.Any("error", err))
+			slog.Error("Failed to generate EdDSA keypair", slog.Any("error", err))
 			os.Exit(4)
 		}
 
@@ -57,25 +57,24 @@ func getCreateSshSigner(privateKeyPath string) (ssh.Signer) {
  * Generates a new public/private key pair
  */
 func generateKeyPair() (privateKeyBytes []byte, publicKeyBytes []byte, err error) {
-	bitSize := 4096
-	key, err := rsa.GenerateKey(rand.Reader, bitSize)
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		return
 	}
+
 	// Encode private key
-	privateKeyBytes = pem.EncodeToMemory(
-		&pem.Block{
-			Type:  "RSA PRIVATE KEY",
-			Bytes: x509.MarshalPKCS1PrivateKey(key),
-		},
-	)
+	pemBlock, err := ssh.MarshalPrivateKey(crypto.PrivateKey(privateKey), "");
+	if err != nil {
+		return
+	}
+	privateKeyBytes = pem.EncodeToMemory(pemBlock)
 
 	// Encode public key
-	publicKey, err := ssh.NewPublicKey(key.Public())
+	sshPublicKey, err := ssh.NewPublicKey(publicKey)
 	if err != nil {
 		return
 	}
-	publicKeyBytes = ssh.MarshalAuthorizedKey(publicKey)
+	publicKeyBytes = ssh.MarshalAuthorizedKey(sshPublicKey)
 
 	return
 }

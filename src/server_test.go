@@ -43,8 +43,8 @@ func TestWriteReadEnvFile(test *testing.T) {
 	_, closeServer := startSftpServer(port, serverSigner, map[string]ssh.PublicKey{user: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
 	defer closeServer()
 
-	privateKeyFile := "test.id_rsa"
-	err := os.WriteFile("test.id_rsa", clientPrivateKey, 0700)
+	privateKeyFile := "test.id_eddsa"
+	err := os.WriteFile("test.id_eddsa", clientPrivateKey, 0700)
 	assertNoError(test, err)
 
 	cmd := exec.Command(
@@ -110,8 +110,8 @@ func TestReadMissingFile(test *testing.T) {
 	_, closeServer := startSftpServer(port, serverSigner, map[string]ssh.PublicKey{user: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
 	defer closeServer()
 
-	privateKeyFile := "test.id_rsa"
-	err := os.WriteFile("test.id_rsa", clientPrivateKey, 0700)
+	privateKeyFile := "test.id_eddsa"
+	err := os.WriteFile("test.id_eddsa", clientPrivateKey, 0700)
 	assertNoError(test, err)
 	cmd := exec.Command(
 		"/usr/bin/scp",
@@ -141,8 +141,8 @@ func TestInvalidUser(test *testing.T) {
 	_, closeServer := startSftpServer(port, serverSigner, map[string]ssh.PublicKey{user: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
 	defer closeServer()
 
-	privateKeyFile := "test.id_rsa"
-	err := os.WriteFile("test.id_rsa", clientPrivateKey, 0700)
+	privateKeyFile := "test.id_eddsa"
+	err := os.WriteFile("test.id_eddsa", clientPrivateKey, 0700)
 	assertNoError(test, err)
 	cmd := exec.Command(
 		"/usr/bin/scp",
@@ -172,8 +172,8 @@ func TestWrongKey(test *testing.T) {
 	_, closeServer := startSftpServer(port, serverSigner, map[string]ssh.PublicKey{user: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
 	defer closeServer()
 
-	privateKeyFile := "test.id_rsa"
-	err := os.WriteFile("test.id_rsa", incorrectClientPrivateKey, 0700)
+	privateKeyFile := "test.id_eddsa"
+	err := os.WriteFile("test.id_eddsa", incorrectClientPrivateKey, 0700)
 	assertNoError(test, err)
 	cmd := exec.Command(
 		"/usr/bin/scp",
@@ -203,8 +203,8 @@ func TestDifferentUsersKey(test *testing.T) {
 	_, closeServer := startSftpServer(port, serverSigner, map[string]ssh.PublicKey{"alice": aliceSigner.PublicKey(), "bob": bobSigner.PublicKey()}, map[string]ssh.Permissions{})
 	defer closeServer()
 
-	privateKeyFile := "test.id_rsa"
-	err := os.WriteFile("test.id_rsa", alicePrivateKey, 0700)
+	privateKeyFile := "test.id_eddsa"
+	err := os.WriteFile("test.id_eddsa", alicePrivateKey, 0700)
 	assertNoError(test, err)
 	cmd := exec.Command(
 		"/usr/bin/scp",
