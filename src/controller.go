@@ -20,7 +20,7 @@ func readFileByHandle(user string, handle string, datastore Datastore) (found bo
 	valid, system, environment, filename := parseFileHandle(handle)
 	if (valid && filename == ".env") {
 		var credentials map[string]string
-		credentials, err = datastore.getAllCredentials(system, environment)
+		credentials, err = datastore.getAllCredentialsBySystemEnvironment(system, environment)
 		contents, err = generateEnvFile(credentials)
 		found = true
 		return

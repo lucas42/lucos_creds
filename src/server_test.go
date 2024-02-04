@@ -35,20 +35,16 @@ func getKeyAndSigner(test *testing.T) (signer ssh.Signer, privateKeyBytes []byte
 	return
 }
 
-func getTempDatastore(test *testing.T) (Datastore) {
+func TestWriteReadEnvFile(test *testing.T) {
+	port := "2222"
+	user := "bob"
 	datastorePath := "test_db.sqlite"
 	dataKeyPath := "test_data.key"
 	defer os.Remove(datastorePath)
 	defer os.Remove(dataKeyPath)
-	return initDatastore(datastorePath, dataKeyPath)
-}
-
-func TestWriteReadEnvFile(test *testing.T) {
-	port := "2222"
-	user := "bob"
 	serverSigner, _ := getKeyAndSigner(test)
 	clientSigner, clientPrivateKey := getKeyAndSigner(test)
-	_, closeServer := startSftpServer(port, serverSigner, getTempDatastore(test), map[string]ssh.PublicKey{user: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
+	_, closeServer := startSftpServer(port, serverSigner, initDatastore(datastorePath, dataKeyPath), map[string]ssh.PublicKey{user: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
 	defer closeServer()
 
 	privateKeyFile := "test.id_eddsa"
@@ -113,9 +109,13 @@ func TestWriteReadEnvFile(test *testing.T) {
 func TestReadMissingFile(test *testing.T) {
 	port := "2222"
 	user := "bob"
+	datastorePath := "test_db.sqlite"
+	dataKeyPath := "test_data.key"
+	defer os.Remove(datastorePath)
+	defer os.Remove(dataKeyPath)
 	serverSigner, _ := getKeyAndSigner(test)
 	clientSigner, clientPrivateKey := getKeyAndSigner(test)
-	_, closeServer := startSftpServer(port, serverSigner, getTempDatastore(test), map[string]ssh.PublicKey{user: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
+	_, closeServer := startSftpServer(port, serverSigner, initDatastore(datastorePath, dataKeyPath), map[string]ssh.PublicKey{user: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
 	defer closeServer()
 
 	privateKeyFile := "test.id_eddsa"
@@ -144,9 +144,13 @@ func TestReadMissingFile(test *testing.T) {
 func TestInvalidUser(test *testing.T) {
 	port := "2222"
 	user := "bob"
+	datastorePath := "test_db.sqlite"
+	dataKeyPath := "test_data.key"
+	defer os.Remove(datastorePath)
+	defer os.Remove(dataKeyPath)
 	serverSigner, _ := getKeyAndSigner(test)
 	clientSigner, clientPrivateKey := getKeyAndSigner(test)
-	_, closeServer := startSftpServer(port, serverSigner, getTempDatastore(test), map[string]ssh.PublicKey{user: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
+	_, closeServer := startSftpServer(port, serverSigner, initDatastore(datastorePath, dataKeyPath), map[string]ssh.PublicKey{user: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
 	defer closeServer()
 
 	privateKeyFile := "test.id_eddsa"
@@ -174,10 +178,14 @@ func TestInvalidUser(test *testing.T) {
 func TestWrongKey(test *testing.T) {
 	port := "2222"
 	user := "bob"
+	datastorePath := "test_db.sqlite"
+	dataKeyPath := "test_data.key"
+	defer os.Remove(datastorePath)
+	defer os.Remove(dataKeyPath)
 	serverSigner, _ := getKeyAndSigner(test)
 	clientSigner, _ := getKeyAndSigner(test)
 	_, incorrectClientPrivateKey := getKeyAndSigner(test)
-	_, closeServer := startSftpServer(port, serverSigner, getTempDatastore(test), map[string]ssh.PublicKey{user: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
+	_, closeServer := startSftpServer(port, serverSigner, initDatastore(datastorePath, dataKeyPath), map[string]ssh.PublicKey{user: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
 	defer closeServer()
 
 	privateKeyFile := "test.id_eddsa"
@@ -205,10 +213,14 @@ func TestWrongKey(test *testing.T) {
 // Tries to log in as Bob, using Alice's private key
 func TestDifferentUsersKey(test *testing.T) {
 	port := "2222"
+	datastorePath := "test_db.sqlite"
+	dataKeyPath := "test_data.key"
+	defer os.Remove(datastorePath)
+	defer os.Remove(dataKeyPath)
 	serverSigner, _ := getKeyAndSigner(test)
 	aliceSigner, alicePrivateKey := getKeyAndSigner(test)
 	bobSigner, _ := getKeyAndSigner(test)
-	_, closeServer := startSftpServer(port, serverSigner, getTempDatastore(test), map[string]ssh.PublicKey{"alice": aliceSigner.PublicKey(), "bob": bobSigner.PublicKey()}, map[string]ssh.Permissions{})
+	_, closeServer := startSftpServer(port, serverSigner, initDatastore(datastorePath, dataKeyPath), map[string]ssh.PublicKey{"alice": aliceSigner.PublicKey(), "bob": bobSigner.PublicKey()}, map[string]ssh.Permissions{})
 	defer closeServer()
 
 	privateKeyFile := "test.id_eddsa"
@@ -232,4 +244,78 @@ func TestDifferentUsersKey(test *testing.T) {
 	}
 	err = os.Remove(privateKeyFile)
 	assertNoError(test, err)
+}
+
+func TestStatePersistsRestart(test *testing.T) {
+	port := "2222"
+	user := "bob"
+	datastorePath := "test_db.sqlite"
+	dataKeyPath := "test_data.key"
+	serverSigner, _ := getKeyAndSigner(test)
+	defer os.Remove(datastorePath)
+	defer os.Remove(dataKeyPath)
+	clientSigner, clientPrivateKey := getKeyAndSigner(test)
+	_, closeFirstServer := startSftpServer(port, serverSigner, initDatastore(datastorePath, dataKeyPath), map[string]ssh.PublicKey{user: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
+
+	privateKeyFile := "test.id_eddsa"
+	err := os.WriteFile("test.id_eddsa", clientPrivateKey, 0700)
+	assertNoError(test, err)
+
+	cmd := exec.Command(
+		"/usr/bin/ssh",
+		"-o BatchMode=yes",
+		"-o StrictHostKeyChecking=no",
+		"-o UserKnownHostsFile=/dev/null",
+		"-i"+privateKeyFile,
+		"-p "+port,
+		user+"@localhost",
+		"lucos_test/production/BORING_KEY=yellow",
+	)
+	cmd.Stderr = os.Stderr
+	cmd.Stdout = os.Stderr
+	err = cmd.Run()
+	assertNoError(test, err)
+
+	closeFirstServer()
+	_, closeSecondServer := startSftpServer(port, serverSigner, initDatastore(datastorePath, dataKeyPath), map[string]ssh.PublicKey{user: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
+	defer closeSecondServer()
+
+	cmd = exec.Command(
+		"/usr/bin/ssh",
+		"-o BatchMode=yes",
+		"-o StrictHostKeyChecking=no",
+		"-o UserKnownHostsFile=/dev/null",
+		"-i"+privateKeyFile,
+		"-p "+port,
+		user+"@localhost",
+		"lucos_test/production/OTHERKEY=green",
+	)
+	cmd.Stderr = os.Stderr
+	cmd.Stdout = os.Stderr
+	err = cmd.Run()
+	assertNoError(test, err)
+
+	testFileName := "test.env"
+	cmd = exec.Command(
+		"/usr/bin/scp",
+		"-o BatchMode=yes",
+		"-o StrictHostKeyChecking=no",
+		"-o UserKnownHostsFile=/dev/null",
+		"-i"+privateKeyFile,
+		"-P "+port,
+		user+"@localhost:lucos_test/production/.env",
+		testFileName, // would prefer to send straight to /dev/stdout, then read cmd.Output(), but that causes weird errors on my laptop
+	);
+	cmd.Stderr = os.Stderr
+	cmd.Stdout = os.Stderr
+	err = cmd.Run()
+	assertNoError(test, err)
+	contents, err := os.ReadFile(testFileName)
+	assertNoError(test, err)
+	err = os.Remove(testFileName)
+	assertNoError(test, err)
+	err = os.Remove(privateKeyFile)
+	assertNoError(test, err)
+
+	assertEqual(test, "Unexpected .env contents", "BORING_KEY=\"yellow\"\nOTHERKEY=\"green\"\n", string(contents))
 }

@@ -5,6 +5,8 @@ import (
 	"crypto/rand"
 	"io"
 	"log/slog"
+	"github.com/jmoiron/sqlx"
+	_ "github.com/mattn/go-sqlite3"
 )
 
 
@@ -13,69 +15,105 @@ import (
  */
 type Datastore struct {
 	dataBlockCipher cipher.AEAD
+	db *sqlx.DB
 	allCredentials map[string]map[string]map[string]string
 }
 
 
 func initDatastore(datastorePath string, dataKeyPath string) (Datastore) {
 	dataBlockCipher := getCreateBlockCipher(dataKeyPath)
-	datastore := Datastore{ dataBlockCipher, map[string]map[string]map[string]string{} }
+
+
+	db := sqlx.MustConnect("sqlite3", datastorePath+"?_busy_timeout=10000")
+	datastore := Datastore{ dataBlockCipher, db, map[string]map[string]map[string]string{} }
+
+	datastore.db.MustExec("PRAGMA foreign_keys = ON;")
+	if !datastore.TableExists("credential") {
+		slog.Info("Creating table `credential`")
+		sqlStmt := `
+		CREATE TABLE "credential" (
+			"system" TEXT NOT NULL,
+			"environment" TEXT NOT NULL,
+			"key" TEXT NOT NULL,
+			"encryptedvalue" BLOB,
+			CONSTRAINT credential_unique UNIQUE (system, environment, key)
+		);
+		`
+		datastore.db.MustExec(sqlStmt)
+	}
+
 	return datastore
 }
 
-func (datastore Datastore) encryptValue(plainValue string) (encryptedValue string, err error) {
-	nonce := make([]byte, datastore.dataBlockCipher.NonceSize())
+func (store Datastore) TableExists(tablename string) (found bool) {
+	err := store.db.Get(&found, "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", tablename)
+	if err != nil && err.Error() != "sql: no rows in result set" {
+		panic(err)
+	}
+	return
+}
+
+type Credential struct {
+	System         string
+	Environment    string
+	Key            string
+	EncryptedValue []byte
+	PlainValue     string
+}
+
+func (credential *Credential) encrypt(dataBlockCipher cipher.AEAD) (err error) {
+	nonce := make([]byte, dataBlockCipher.NonceSize())
 	_, err = io.ReadFull(rand.Reader, nonce)
 	if err != nil {
 		return
 	}
-	encryptedValue = string(datastore.dataBlockCipher.Seal(nonce, nonce, []byte(plainValue), nil))
+	credential.EncryptedValue = dataBlockCipher.Seal(nonce, nonce, []byte(credential.PlainValue), nil)
+	credential.PlainValue = "" // Blank plaintext value so it doesn't accidentally appear in any logs etc after this point
 	return
 }
 
-func (datastore Datastore) decryptValue(encryptedValue string) (plainValue string, err error) {
-	encryptedBytes := []byte(encryptedValue)
-	nonce := encryptedBytes[:datastore.dataBlockCipher.NonceSize()]
-	encryptedBytes = encryptedBytes[datastore.dataBlockCipher.NonceSize():]
-	plainBytes, err := datastore.dataBlockCipher.Open(nil, nonce, encryptedBytes, nil)
-	plainValue = string(plainBytes)
+func (credential *Credential) decrypt(dataBlockCipher cipher.AEAD) (err error) {
+	nonce := credential.EncryptedValue[:dataBlockCipher.NonceSize()]
+	cipherText := credential.EncryptedValue[dataBlockCipher.NonceSize():]
+	plainBytes, err := dataBlockCipher.Open(nil, nonce, cipherText, nil)
+	credential.PlainValue = string(plainBytes)
 	return
 }
 
-/**
- * For now, credentials are stored encrypted in memory
- * TODO: write them to disk
- */
-func (datastore Datastore) getAllCredentials(system string, environment string) (plainCredentials map[string]string, err error) {
-	var encryptedCredentials map[string]string
-	if datastore.allCredentials == nil || datastore.allCredentials[system] == nil || datastore.allCredentials[system][environment] == nil {
-		encryptedCredentials = map[string]string{}
-	} else {
-		encryptedCredentials = datastore.allCredentials[system][environment]
+func (datastore Datastore) getAllCredentialsBySystemEnvironment(system string, environment string) (plainCredentials map[string]string, err error) {
+	plainCredentials = make(map[string]string)
+	credentialList := []Credential{}
+	err = datastore.db.Select(&credentialList, "SELECT * FROM credential WHERE system = $1 AND environment = $2 ORDER BY key", system, environment)
+	if err != nil {
+		slog.Warn("Failed to retrieve credentials from datastore", slog.Any("error", err))
+		return
 	}
-	plainCredentials = map[string]string{}
-	for key, encryptedValue := range encryptedCredentials {
-		plainCredentials[key], err = datastore.decryptValue(encryptedValue)
+	for _, credential := range credentialList {
+		err := credential.decrypt(datastore.dataBlockCipher)
 		if err != nil {
-			slog.Warn("Failed to decrypt", "key", key, slog.Any("error", err))
+			slog.Warn("Failed to decrypt", "key", credential.Key, slog.Any("error", err))
 		}
+		plainCredentials[credential.Key] = credential.PlainValue
 	}
 	return
 }
-func (datastore Datastore) updateCredential(system string, environment string, key string, rawValue string) (err error) {
-	if datastore.allCredentials[system] == nil {
-		datastore.allCredentials[system] = map[string]map[string]string{}
-	}
-	if datastore.allCredentials[system][environment] == nil {
-		datastore.allCredentials[system][environment] = map[string]string{}
-	}
 
-	encryptedValue, err := datastore.encryptValue(rawValue)
+func (datastore Datastore) updateCredential(system string, environment string, key string, rawValue string) (err error) {
+	credential := Credential{}
+	credential.System = system
+	credential.Environment = environment
+	credential.Key = key
+	credential.PlainValue = rawValue
+	err = credential.encrypt(datastore.dataBlockCipher)
 	if err != nil {
 		return
 	}
-	datastore.allCredentials[system][environment][key] = encryptedValue
-	slog.Info("Updated Credential", "system", system, "environment", environment, "key", key, "encryptedValue", encryptedValue)
+
+	_, err = datastore.db.NamedExec("REPLACE INTO credential(system, environment, key, encryptedvalue) values(:system, :environment, :key, :encryptedvalue)", credential)
+	if err != nil {
+		return
+	}
+	slog.Info("Updated Credential", "credential", credential)
 	return
 }
 
