@@ -10,7 +10,6 @@ services:
       - "store:/var/lib/creds_store/"
     restart: always
     environment:
-      - DEBUG=true
       - LOGANNE_HOST=https://loganne.l42.eu
 
 volumes:
