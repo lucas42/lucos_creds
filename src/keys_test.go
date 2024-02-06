@@ -100,5 +100,5 @@ func TestCreatingDataKey(test *testing.T) {
  */
 func TestAuthorizedKeys(test *testing.T) {
 	keyMap := parseAuthorizedKeys("authorized_keys")
-	assertEqual(test, "Unexpected number of keys found in authorized_keys files", 2, len(keyMap))
+	assertEqual(test, "Unexpected number of keys found in authorized_keys files", 3, len(keyMap))
 }
