@@ -26,10 +26,8 @@ workflows:
   build-deploy:
     jobs:
       - test
-      - lucos/build-amd64:
-          context: docker
+      - lucos/build-amd64
       - lucos/deploy-avalon:
-          context: docker
           requires:
             - test
             - lucos/build-amd64
