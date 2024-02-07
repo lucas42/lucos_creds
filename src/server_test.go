@@ -85,6 +85,7 @@ func TestWriteReadEnvFile(test *testing.T) {
 	testFileName := "test.env"
 	cmd = exec.Command(
 		"/usr/bin/scp",
+		"-s", // Needed for OpenSSH 8.9 which doesn't default to SFTP (can remove for OpenSSH9.0 and above)
 		"-o BatchMode=yes",
 		"-o StrictHostKeyChecking=no",
 		"-o UserKnownHostsFile=/dev/null",
@@ -124,6 +125,7 @@ func TestReadMissingFile(test *testing.T) {
 	assertNoError(test, err)
 	cmd := exec.Command(
 		"/usr/bin/scp",
+		"-s", // Needed for OpenSSH 8.9 which doesn't default to SFTP (can remove for OpenSSH9.0 and above)
 		"-o BatchMode=yes",
 		"-o StrictHostKeyChecking=no",
 		"-o UserKnownHostsFile=/dev/null",
@@ -159,6 +161,7 @@ func TestInvalidUser(test *testing.T) {
 	assertNoError(test, err)
 	cmd := exec.Command(
 		"/usr/bin/scp",
+		"-s", // Needed for OpenSSH 8.9 which doesn't default to SFTP (can remove for OpenSSH9.0 and above)
 		"-o BatchMode=yes",
 		"-o StrictHostKeyChecking=no",
 		"-o UserKnownHostsFile=/dev/null",
@@ -194,6 +197,7 @@ func TestWrongKey(test *testing.T) {
 	assertNoError(test, err)
 	cmd := exec.Command(
 		"/usr/bin/scp",
+		"-s", // Needed for OpenSSH 8.9 which doesn't default to SFTP (can remove for OpenSSH9.0 and above)
 		"-o BatchMode=yes",
 		"-o StrictHostKeyChecking=no",
 		"-o UserKnownHostsFile=/dev/null",
@@ -229,6 +233,7 @@ func TestDifferentUsersKey(test *testing.T) {
 	assertNoError(test, err)
 	cmd := exec.Command(
 		"/usr/bin/scp",
+		"-s", // Needed for OpenSSH 8.9 which doesn't default to SFTP (can remove for OpenSSH9.0 and above)
 		"-o BatchMode=yes",
 		"-o StrictHostKeyChecking=no",
 		"-o UserKnownHostsFile=/dev/null",
@@ -299,6 +304,7 @@ func TestStatePersistsRestart(test *testing.T) {
 	testFileName := "test.env"
 	cmd = exec.Command(
 		"/usr/bin/scp",
+		"-s", // Needed for OpenSSH 8.9 which doesn't default to SFTP (can remove for OpenSSH9.0 and above)
 		"-o BatchMode=yes",
 		"-o StrictHostKeyChecking=no",
 		"-o UserKnownHostsFile=/dev/null",
