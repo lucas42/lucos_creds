@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -31,7 +32,13 @@ func readFileByHandle(user string, handle string, datastore Datastore) (found bo
 
 func generateEnvFile(keyvalues map[string]string) (contents string, err error) {
 	var builder strings.Builder
-	for key, value := range keyvalues {
+	keys := []string{}
+	for key, _ := range keyvalues {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		value := keyvalues[key]
 		escapedKey := strings.ReplaceAll(key, "=", "\\=")
 		escapedValue := strings.ReplaceAll(value, "\"", "\\\"")
 		fmt.Fprintf(&builder, "%s=\"%s\"\n", escapedKey, escapedValue)
