@@ -3,12 +3,13 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 )
 
 type LoganneInterface interface {
-	post(string, string, Credential)
+	postCredentialUpdated(string, string, string)
 }
 
 type Loganne struct {
@@ -36,4 +37,10 @@ func (loganne Loganne) post(eventType string, humanReadable string, credential C
 	if err != nil {
 		slog.Warn("Error occured whilst posting to Loganne", slog.Any("error", err))
 	}
+}
+
+func (loganne Loganne) postCredentialUpdated(system string, environment string, key string) {
+	credential := Credential{ System: system, Environment: environment, Key: key }
+	loganneMessage := fmt.Sprintf("Credential %s updated in %s (%s)", credential.Key, credential.System, credential.Environment)
+	loganne.post("credentialUpdated", loganneMessage, credential)
 }

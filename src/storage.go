@@ -210,8 +210,7 @@ func (datastore Datastore) updateCredential(system string, environment string, k
 		return
 	}
 	slog.Info("Updated Credential", "credential", credential)
-	loganneMessage := fmt.Sprintf("Credential %s updated in %s (%s)", credential.Key, credential.System, credential.Environment)
-	datastore.loganne.post("credentialUpdated", loganneMessage, credential)
+	datastore.loganne.postCredentialUpdated(credential.System, credential.Environment, credential.Key)
 	return
 }
 
@@ -231,6 +230,8 @@ func (datastore Datastore) updateLinkedCredential(client_system string, client_e
 		return
 	}
 	slog.Info("Updated Linked Credential", "credential", credential)
+	datastore.loganne.postCredentialUpdated(credential.ClientSystem, credential.ClientEnvironment, strings.ToUpper("KEY_"+credential.ServerSystem))
+	datastore.loganne.postCredentialUpdated(credential.ServerSystem, credential.ServerEnvironment, strings.ToUpper("CLIENT_KEYS"))
 	return
 }
 

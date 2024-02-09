@@ -27,12 +27,9 @@ func TestUpdatingCredentialNotifiesLoganne(test *testing.T) {
 	datastore := initDatastore(datastorePath, dataKeyPath, MockLoganne{})
 	datastore.updateCredential("lucos_test", "testing", "SPECIAL_KEY", "lavender")
 	assertEqual(test, "Wrong number of calls to loganne", 1, loganneRequestCount)
-	assertEqual(test, "Wrong event type sent to loganne", "credentialUpdated", lastLoganneType)
-	assertEqual(test, "Unexpected messaged sent to loganne", "Credential SPECIAL_KEY updated in lucos_test (testing)", lastLoganneMessage)
-	assertEqual(test, "Wrong system sent to loganne", "lucos_test", lastLoganneCredential.System)
-	assertEqual(test, "Wrong environment sent to loganne", "testing", lastLoganneCredential.Environment)
-	assertEqual(test, "Wrong key sent to loganne", "SPECIAL_KEY", lastLoganneCredential.Key)
-	assertEqual(test, "Credential Value sent to loganne", "", lastLoganneCredential.PlainValue)
+	assertEqual(test, "Wrong system sent to loganne", "lucos_test", lastLoganneSystem)
+	assertEqual(test, "Wrong environment sent to loganne", "testing", lastLoganneEnvironment)
+	assertEqual(test, "Wrong key sent to loganne", "SPECIAL_KEY", lastLoganneKey)
 }
 
 func TestRetrievingCredentialDoesntNotifyLoganne(test *testing.T) {
@@ -143,4 +140,18 @@ func TestRejectSimpleCredentialsWhichMayConflictWithLinkedCredentials(test *test
 	assertNotEqual(test, "No error returned creating a key beginning KEY_", nil, err)
 	err = datastore.updateCredential("lucos_test", "testing", "CLIENT_KEYS", "orange")
 	assertNotEqual(test, "No error returned creating a key CLIENT_KEYS", nil, err)
+}
+
+func TestUpdatingLinkedCredentialNotifiesLoganne(test *testing.T) {
+	loganneRequestCount = 0
+	datastorePath := "test_db.sqlite"
+	dataKeyPath := "test_data.key"
+	defer os.Remove(datastorePath)
+	defer os.Remove(dataKeyPath)
+	datastore := initDatastore(datastorePath, dataKeyPath, MockLoganne{})
+	datastore.updateLinkedCredential("lucos_test_client", "testing", "lucos_test_server", "testing")
+	assertEqual(test, "Wrong number of calls to loganne", 2, loganneRequestCount)
+	assertEqual(test, "Wrong system sent to loganne", "lucos_test_server", lastLoganneSystem)
+	assertEqual(test, "Wrong environment sent to loganne", "testing", lastLoganneEnvironment)
+	assertEqual(test, "Wrong key sent to loganne", "CLIENT_KEYS", lastLoganneKey)
 }

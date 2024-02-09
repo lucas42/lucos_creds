@@ -342,7 +342,6 @@ func TestCreateLinkedCredentialOverSSH(test *testing.T) {
 	privateKeyFile := "test.id_eddsa"
 	err := os.WriteFile("test.id_eddsa", clientPrivateKey, 0700)
 	assertNoError(test, err)
-	defer os.Remove(privateKeyFile)
 
 	cmd := exec.Command(
 		"/usr/bin/ssh",
@@ -415,6 +414,8 @@ func TestCreateLinkedCredentialOverSSH(test *testing.T) {
 	err = cmd.Run()
 	assertNoError(test, err)
 	contents, err = os.ReadFile(testFileName)
+	assertNoError(test, err)
+	err = os.Remove(privateKeyFile)
 	assertNoError(test, err)
 
 	assertEqual(test, "Unexpected .env contents", "OTHERKEY=\"green\"\nCLIENT_KEYS=\"lucos_test_client:production="+sharedCredential+"\"\n", string(contents))
