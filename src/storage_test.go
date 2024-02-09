@@ -16,7 +16,6 @@ func TestKeysNormalisedToUppercase(test *testing.T) {
 	actual, err := datastore.getAllCredentialsBySystemEnvironment("lucos_test", "testing")
 	assertNoError(test, err)
 	assertEqual(test, "Credential keys not normalised to Uppercase", expected, actual)
-	
 }
 
 func TestUpdatingCredentialNotifiesLoganne(test *testing.T) {
@@ -132,4 +131,16 @@ func TestUpdatingLinkToDifferentEnv(test *testing.T) {
 	assertNoError(test, err)
 	expected := "lucos_test_client:testing="+secondClientKey
 	assertEqual(test, "Upexpected CLIENT_KEYS for server in new environment", expected, serverCreds["CLIENT_KEYS"])
+}
+
+func TestRejectSimpleCredentialsWhichMayConflictWithLinkedCredentials(test *testing.T) {
+	datastorePath := "test_db.sqlite"
+	dataKeyPath := "test_data.key"
+	defer os.Remove(datastorePath)
+	defer os.Remove(dataKeyPath)
+	datastore := initDatastore(datastorePath, dataKeyPath, MockLoganne{})
+	err := datastore.updateCredential("lucos_test", "testing", "KEY_LUCOS_TEST_SERVER", "avocado")
+	assertNotEqual(test, "No error returned creating a key beginning KEY_", nil, err)
+	err = datastore.updateCredential("lucos_test", "testing", "CLIENT_KEYS", "orange")
+	assertNotEqual(test, "No error returned creating a key CLIENT_KEYS", nil, err)
 }

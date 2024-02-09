@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/cipher"
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -194,6 +195,10 @@ func (datastore Datastore) updateCredential(system string, environment string, k
 	credential.System = system
 	credential.Environment = environment
 	credential.Key = strings.ToUpper(key) // Normalise all keys to only be uppercase
+	if (credential.Key == "CLIENT_KEYS" || strings.HasPrefix(credential.Key, "KEY_")) {
+		err = errors.New("Invalid Key")
+		return
+	}
 	credential.PlainValue = rawValue
 	err = credential.encrypt(datastore.dataBlockCipher)
 	if err != nil {
