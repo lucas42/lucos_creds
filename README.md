@@ -40,6 +40,24 @@ Copy the directory from the docker host at /var/lib/docker/volumes/lucos\_creds\
 
 Note: only **value** gets encrypted at rest.  *DO NOT* place any sensitive data in the other fields
 
+### Creating or updating a linked credentials between systems
+
+`ssh -p 2202 creds.l42.eu ${clientsystem}/${clientenvironment} => ${serversystem}/${serverenvironment}`
+
+* **clientsystem** is the slug of the github repository for the system which will make requests with this credential
+* **clientenvironment** is the name of the environment requests are being made *from* (eg 'production' or 'development')
+* **serversystem** is the slug of the github repository for the system which will verify requests made with this credential
+* **serverenvironment** is the name of the environment requests are being made *to* (eg 'production' or 'development')
+
+Note: *DO NOT* place any sensitive data in these fields
+
+The credential itself will be a randomly generated alphanumeric string.
+For a given pair of serversystem/serverenvironment, multiple clientsystem/clientenvironments can be created.
+For a given pair of clientsystem/clientenvironment, each serversystem can only have ONE serverenvironment
+
+The clientsystem will have its .env file return the credential with the key "KEY_${serversystem}".
+The serversystem will have its .env file return the credential in the key "CLIENT_KEYS", alongside any other clientsystems/clientenvironments which have a credential for that serversystem/serverenvironment combination.
+
 ### Populate an envfile for local development
 
 `scp -P 2202 "creds.l42.eu:${PWD##*/}/development/.env" .`
