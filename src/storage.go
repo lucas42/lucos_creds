@@ -225,6 +225,7 @@ func (datastore Datastore) updateLinkedCredential(client_system string, client_e
 	if err != nil {
 		return
 	}
+	slog.Info("Updated Linked Credential", "credential", credential)
 	return
 }
 

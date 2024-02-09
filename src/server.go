@@ -51,30 +51,59 @@ func handleSshConnection(connection net.Conn, config *ssh.ServerConfig, datastor
 					break
 				}
 				if (req.Type == "exec") {
-					payloadParts := strings.Split(payload.Data, "=")
-					isValid, system, environment, key := parseFileHandle(payloadParts[0])
-					if (len(payloadParts) != 2 || !isValid) {
-						slog.Warn("Invalid exec payload.  Rejecting request.", "payload", payload.Data, slog.Any("error", err))
-						req.Reply(false, nil)
+					if (strings.Contains(payload.Data, "=>")) {
+						linkedCredentialParts := strings.Split(payload.Data, "=>")
+						if (len(linkedCredentialParts) != 2) {
+							slog.Warn("Invalid exec payload.  Rejecting request.", "payload", payload.Data, slog.Any("error", err))
+							req.Reply(false, nil)
+						} else {
+							clientParts := strings.Split(strings.TrimSpace(linkedCredentialParts[0]), "/")
+							serverParts := strings.Split(strings.TrimSpace(linkedCredentialParts[1]), "/")
+							if (len(clientParts) != 2 || len(serverParts) != 2) {
+								slog.Warn("Invalid exec payload.  Rejecting request.", "payload", payload.Data, slog.Any("error", err))
+								req.Reply(false, nil)
+							} else {
+								slog.Debug("Accepting exec linked credential request", "client", clientParts, "server", serverParts)
+								req.Reply(true, nil) // payload is ignored for replies to channel-specific requests, so just pass nil
+								var exitStatus struct {
+									code uint32
+								}
+								err := datastore.updateLinkedCredential(clientParts[0], clientParts[1], serverParts[0], serverParts[1])
+								if err != nil {
+									slog.Warn("Failed to update linked credential", slog.Any("error", err))
+								}
+								_, err = channel.SendRequest("exit-status", false, ssh.Marshal(exitStatus))
+								if err != nil {
+									slog.Warn("Couldn't send exit-status", slog.Any("error", err))
+								}
+								channel.Close()
+							}
+						}
 					} else {
-						value := payloadParts[1]
-						slog.Debug("Accepting exec request", "system", system, "environment", environment, "key", key, "value", "****")
-						req.Reply(true, nil) // payload is ignored for replies to channel-specific requests, so just pass nil
-						var exitStatus struct {
-							code uint32
-						}
-						err := datastore.updateCredential(system, environment, key, value)
-						if err != nil {
-							slog.Warn("Failed to update credential", slog.Any("error", err))
-						}
+						payloadParts := strings.Split(payload.Data, "=")
+						isValid, system, environment, key := parseFileHandle(payloadParts[0])
+						if (len(payloadParts) != 2 || !isValid) {
+							slog.Warn("Invalid exec payload.  Rejecting request.", "payload", payload.Data, slog.Any("error", err))
+							req.Reply(false, nil)
+						} else {
+							value := payloadParts[1]
+							slog.Debug("Accepting exec request", "system", system, "environment", environment, "key", key, "value", "****")
+							req.Reply(true, nil) // payload is ignored for replies to channel-specific requests, so just pass nil
+							var exitStatus struct {
+								code uint32
+							}
+							err := datastore.updateCredential(system, environment, key, value)
+							if err != nil {
+								slog.Warn("Failed to update credential", slog.Any("error", err))
+							}
 
-						_, err = channel.SendRequest("exit-status", false, ssh.Marshal(exitStatus))
-						if err != nil {
-							slog.Warn("Couldn't send exit-status", slog.Any("error", err))
+							_, err = channel.SendRequest("exit-status", false, ssh.Marshal(exitStatus))
+							if err != nil {
+								slog.Warn("Couldn't send exit-status", slog.Any("error", err))
+							}
+							channel.Close()
 						}
-						channel.Close()
 					}
-					req.Reply(false, nil)
 				} else if (req.Type == "subsystem" && payload.Data == "sftp") {
 					slog.Debug("Accepting request for subsystem sftp", "RequestType", req.Type, "Payload", req.Payload[4:])
 					err = initSftpSubsystem(channel)
