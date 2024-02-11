@@ -42,7 +42,7 @@ Note: only **value** gets encrypted at rest.  *DO NOT* place any sensitive data 
 
 ### Creating or updating a linked credentials between systems
 
-`ssh -p 2202 creds.l42.eu ${clientsystem}/${clientenvironment} => ${serversystem}/${serverenvironment}`
+`ssh -p 2202 creds.l42.eu "${clientsystem}/${clientenvironment} => ${serversystem}/${serverenvironment}"`
 
 * **clientsystem** is the slug of the github repository for the system which will make requests with this credential
 * **clientenvironment** is the name of the environment requests are being made *from* (eg 'production' or 'development')
