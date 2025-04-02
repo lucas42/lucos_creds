@@ -1,11 +1,11 @@
 module lucos_creds
 
 go 1.21
-toolchain go1.23.6
+toolchain go1.24.1
 
 require (
 	github.com/jmoiron/sqlx v1.4.0
-	github.com/mattn/go-sqlite3 v1.14.24
+	github.com/mattn/go-sqlite3 v1.14.25
 	golang.org/x/crypto v0.36.0
 )
 
