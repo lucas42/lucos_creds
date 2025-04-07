@@ -2,6 +2,7 @@ package main
 
 import (
 	"testing"
+	"net"
 	"net/http"
 	"fmt"
 	"io/ioutil"
@@ -10,10 +11,6 @@ import (
 var latestRequest *http.Request
 var latestRequestBody string
 var latestRequestError error
-func mockLoganneServer() {
-    http.HandleFunc("/", mockLoganneEvent)
-    http.ListenAndServe(":7999", nil)
-}
 
 func mockLoganneEvent(w http.ResponseWriter, request *http.Request) {
 	latestRequest = request
@@ -41,7 +38,12 @@ func (mock MockLoganne) postCredentialUpdated(system string, environment string,
 }
 
 func TestLoganneEvent(test *testing.T) {
-	go mockLoganneServer()
+	listener, err := net.Listen("tcp", ":7999")
+	assertNoError(test, err)
+	loganneServer := &http.Server{
+		Handler: http.HandlerFunc(mockLoganneEvent),
+	}
+	go loganneServer.Serve(listener)
 	loganne := Loganne{
 		host: "http://localhost:7999",
 		source: "creds_test",
