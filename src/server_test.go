@@ -106,7 +106,7 @@ func TestWriteReadEnvFile(test *testing.T) {
 	err = os.Remove(privateKeyFile)
 	assertNoError(test, err)
 
-	assertEqual(test, "Unexpected .env contents", "BORING_KEY=\"yellow\"\nOTHERKEY=\"green\"\n", string(contents))
+	assertEqual(test, "Unexpected .env contents", "BORING_KEY=\"yellow\"\nENVIRONMENT=\"production\"\nOTHERKEY=\"green\"\n", string(contents))
 }
 // Requests a file which isn't available on the server
 func TestReadMissingFile(test *testing.T) {
@@ -325,7 +325,7 @@ func TestStatePersistsRestart(test *testing.T) {
 	err = os.Remove(privateKeyFile)
 	assertNoError(test, err)
 
-	assertEqual(test, "Unexpected .env contents", "BORING_KEY=\"yellow\"\nOTHERKEY=\"green\"\n", string(contents))
+	assertEqual(test, "Unexpected .env contents", "BORING_KEY=\"yellow\"\nENVIRONMENT=\"production\"\nOTHERKEY=\"green\"\n", string(contents))
 }
 func TestCreateLinkedCredentialOverSSH(test *testing.T) {
 	port := "2222"
@@ -392,9 +392,10 @@ func TestCreateLinkedCredentialOverSSH(test *testing.T) {
 	assertNoError(test, err)
 	contents, err := os.ReadFile(testFileName)
 	assertNoError(test, err)
-	keyvalueparts := strings.Split(string(contents), "=")
+	keyvalues := strings.Split(string(contents), "\n")
+	keyvalueparts := strings.Split(keyvalues[1], "=")
 	assertEqual(test, "Linked Credential not set properly for client", "KEY_LUCOS_TEST_SERVER", keyvalueparts[0])
-	sharedCredential := strings.Trim(keyvalueparts[1], "\"\n")
+	sharedCredential := strings.Trim(keyvalueparts[1], "\"")
 
 	testFileName = "test_server.env"
 	defer os.Remove(testFileName)
@@ -418,5 +419,5 @@ func TestCreateLinkedCredentialOverSSH(test *testing.T) {
 	err = os.Remove(privateKeyFile)
 	assertNoError(test, err)
 
-	assertEqual(test, "Unexpected .env contents", "CLIENT_KEYS=\"lucos_test_client:production="+sharedCredential+"\"\nOTHERKEY=\"green\"\n", string(contents))
+	assertEqual(test, "Unexpected .env contents", "CLIENT_KEYS=\"lucos_test_client:production="+sharedCredential+"\"\nENVIRONMENT=\"production\"\nOTHERKEY=\"green\"\n", string(contents))
 }

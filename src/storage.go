@@ -132,6 +132,13 @@ func (datastore Datastore) getAllCredentialsBySystemEnvironment(system string, e
 	if serverCredentialCombinedValue != "" {
 		allCredentials["CLIENT_KEYS"] = serverCredentialCombinedValue
 	}
+	builtInCredentials, err := datastore.getBuiltInCredentialsBySystemEnvironment(system, environment)
+	if err != nil {
+		slog.Warn("Failed to get Built-in Credentials", "system", system, "environment", environment, slog.Any("error", err))
+	}
+	for key, value := range builtInCredentials {
+		allCredentials[key] = value
+	}
 	return
 }
 func (datastore Datastore) getSimpleCredentialsBySystemEnvironment(system string, environment string) (plainCredentials map[string]string, err error) {
@@ -189,13 +196,18 @@ func (datastore Datastore) getServerCredentialsBySystemEnvironment(system string
 	}
 	return
 }
+func (datastore Datastore) getBuiltInCredentialsBySystemEnvironment(system string, environment string) (plainCredentials map[string]string, err error) {
+	plainCredentials = make(map[string]string)
+	plainCredentials["ENVIRONMENT"] = environment
+	return
+}
 
 func (datastore Datastore) updateCredential(system string, environment string, key string, rawValue string) (err error) {
 	credential := Credential{}
 	credential.System = system
 	credential.Environment = environment
 	credential.Key = strings.ToUpper(key) // Normalise all keys to only be uppercase
-	if (credential.Key == "CLIENT_KEYS" || strings.HasPrefix(credential.Key, "KEY_")) {
+	if (credential.Key == "CLIENT_KEYS" || strings.HasPrefix(credential.Key, "KEY_") || credential.Key == "ENVIRONMENT") {
 		err = errors.New("Invalid Key")
 		return
 	}

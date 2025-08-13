@@ -12,7 +12,7 @@ func TestKeysNormalisedToUppercase(test *testing.T) {
 	datastore := initDatastore(datastorePath, dataKeyPath, MockLoganne{})
 	datastore.updateCredential("lucos_test", "testing", "SPECIAL_KEY", "avocado")
 	datastore.updateCredential("lucos_test", "testing", "Special_Key", "banana")
-	expected := map[string]string { "SPECIAL_KEY": "banana" }
+	expected := map[string]string { "SPECIAL_KEY": "banana", "ENVIRONMENT": "testing" }
 	actual, err := datastore.getAllCredentialsBySystemEnvironment("lucos_test", "testing")
 	assertNoError(test, err)
 	assertEqual(test, "Credential keys not normalised to Uppercase", expected, actual)
@@ -123,7 +123,7 @@ func TestUpdatingLinkToDifferentEnv(test *testing.T) {
 
 	serverCreds, err := datastore.getAllCredentialsBySystemEnvironment("lucos_test_server", "testing")
 	assertNoError(test, err)
-	assertEqual(test, "Expected no credentials for server in old environment", map[string]string{}, serverCreds)
+	assertEqual(test, "Expected no credentials for server in old environment", map[string]string{"ENVIRONMENT": "testing"}, serverCreds)
 	serverCreds, err = datastore.getAllCredentialsBySystemEnvironment("lucos_test_server", "staging")
 	assertNoError(test, err)
 	expected := "lucos_test_client:testing="+secondClientKey
@@ -154,4 +154,25 @@ func TestUpdatingLinkedCredentialNotifiesLoganne(test *testing.T) {
 	assertEqual(test, "Wrong system sent to loganne", "lucos_test_server", lastLoganneSystem)
 	assertEqual(test, "Wrong environment sent to loganne", "testing", lastLoganneEnvironment)
 	assertEqual(test, "Wrong key sent to loganne", "CLIENT_KEYS", lastLoganneKey)
+}
+
+func TestRejectSimpleCredentialsWhichMayConflictWithBuiltInCredentials(test *testing.T) {
+	datastorePath := "test_db.sqlite"
+	dataKeyPath := "test_data.key"
+	defer os.Remove(datastorePath)
+	defer os.Remove(dataKeyPath)
+	datastore := initDatastore(datastorePath, dataKeyPath, MockLoganne{})
+	err := datastore.updateCredential("lucos_test", "testing", "ENVIRONMENT", "integration")
+	assertNotEqual(test, "No error returned creating a key ENVIRONMENT", nil, err)
+}
+
+func TestBuiltInCredentials(test *testing.T) {
+	datastorePath := "test_db.sqlite"
+	dataKeyPath := "test_data.key"
+	defer os.Remove(datastorePath)
+	defer os.Remove(dataKeyPath)
+	datastore := initDatastore(datastorePath, dataKeyPath, MockLoganne{})
+	serverCreds, err := datastore.getAllCredentialsBySystemEnvironment("lucos_test", "testing")
+	assertNoError(test, err)
+	assertEqual(test, "Expected ENVIRONMENT variable to match requested environment", "testing", serverCreds["ENVIRONMENT"])
 }
