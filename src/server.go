@@ -92,9 +92,17 @@ func handleSshConnection(connection net.Conn, config *ssh.ServerConfig, datastor
 							var exitStatus struct {
 								code uint32
 							}
-							err := datastore.updateCredential(system, environment, key, value)
-							if err != nil {
-								slog.Warn("Failed to update credential", slog.Any("error", err))
+
+							if (value != "") {
+								err := datastore.updateCredential(system, environment, key, value)
+								if err != nil {
+									slog.Warn("Failed to update credential", slog.Any("error", err))
+								}
+							} else {
+								err := datastore.deleteCredential(system, environment, key)
+								if err != nil {
+									slog.Warn("Failed to delete credential", slog.Any("error", err))
+								}
 							}
 
 							_, err = channel.SendRequest("exit-status", false, ssh.Marshal(exitStatus))

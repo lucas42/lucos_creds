@@ -10,6 +10,7 @@ import (
 
 type LoganneInterface interface {
 	postCredentialUpdated(string, string, string)
+	postCredentialDeleted(string, string, string)
 }
 
 type Loganne struct {
@@ -43,4 +44,10 @@ func (loganne Loganne) postCredentialUpdated(system string, environment string, 
 	credential := Credential{ System: system, Environment: environment, Key: key }
 	loganneMessage := fmt.Sprintf("Credential %s updated in %s (%s)", credential.Key, credential.System, credential.Environment)
 	loganne.post("credentialUpdated", loganneMessage, credential)
+}
+
+func (loganne Loganne) postCredentialDeleted(system string, environment string, key string) {
+	credential := Credential{ System: system, Environment: environment, Key: key }
+	loganneMessage := fmt.Sprintf("Credential %s deleted from %s (%s)", credential.Key, credential.System, credential.Environment)
+	loganne.post("credentialDeleted", loganneMessage, credential)
 }

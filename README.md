@@ -40,6 +40,14 @@ Copy the directory from the docker host at /var/lib/docker/volumes/lucos\_creds\
 
 Note: only **value** gets encrypted at rest.  *DO NOT* place any sensitive data in the other fields
 
+### Deleting a credential
+
+`ssh -p 2202 creds.l42.eu ${system}/${environment}/${key}=`
+
+* **system** is the slug of the github repository for system which uses this credential
+* **environment** is the name of which environment being used (eg 'production' or 'development')
+* **key** is the key of the credential to delete. Gets normalised to all uppercase
+
 ### Creating or updating a linked credentials between systems
 
 `ssh -p 2202 creds.l42.eu "${clientsystem}/${clientenvironment} => ${serversystem}/${serverenvironment}"`

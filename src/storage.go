@@ -247,6 +247,25 @@ func (datastore Datastore) updateLinkedCredential(client_system string, client_e
 	return
 }
 
+func (datastore Datastore) deleteCredential(system string, environment string, key string) (err error) {
+	credential := Credential{}
+	credential.System = system
+	credential.Environment = environment
+	credential.Key = strings.ToUpper(key) // Normalise all keys to only be uppercase
+	if (credential.Key == "CLIENT_KEYS" || strings.HasPrefix(credential.Key, "KEY_") || credential.Key == "ENVIRONMENT") {
+		err = errors.New("Invalid Key")
+		return
+	}
+
+	_, err = datastore.db.NamedExec("DELETE FROM credential WHERE system = :system AND environment = :environment AND key = :key", credential)
+	if err != nil {
+		return
+	}
+	slog.Info("Deleted Credential", "credential", credential)
+	datastore.loganne.postCredentialDeleted(credential.System, credential.Environment, credential.Key)
+	return
+}
+
 func generateNewEncryptedValue(dataBlockCipher cipher.AEAD)(encryptedValue []byte, err error) {
 	const characters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890"
 	length := 32

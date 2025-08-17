@@ -25,6 +25,18 @@ func assertNoError(test *testing.T, err error) {
 		debug.PrintStack()
 	}
 }
+func assertMapContains(test *testing.T, message string, expected string, actual map[string]string ) {
+	_, contains := actual[expected]
+	if !contains {
+		test.Errorf("%s. Expected key: %s missing from map: %s", message, expected, actual)
+	}
+}
+func assertMapNotContains(test *testing.T, message string, expected string, actual map[string]string ) {
+	_, contains := actual[expected]
+	if contains {
+		test.Errorf("%s. Expected key: %s found in map: %s", message, expected, actual)
+	}
+}
 
 /**
  * Convenience method for generating a keypair and getting a signer for it
@@ -420,4 +432,74 @@ func TestCreateLinkedCredentialOverSSH(test *testing.T) {
 	assertNoError(test, err)
 
 	assertEqual(test, "Unexpected .env contents", "CLIENT_KEYS=\"lucos_test_client:production="+sharedCredential+"\"\nENVIRONMENT=\"production\"\nOTHERKEY=\"green\"\n", string(contents))
+}
+func TestDeleteCredentialOverSSH(test *testing.T) {
+	port := "2222"
+	user := "bob"
+	datastorePath := "test_db.sqlite"
+	dataKeyPath := "test_data.key"
+	defer os.Remove(datastorePath)
+	defer os.Remove(dataKeyPath)
+	serverSigner, _ := getKeyAndSigner(test)
+	clientSigner, clientPrivateKey := getKeyAndSigner(test)
+	_, closeServer := startSftpServer(port, serverSigner, initDatastore(datastorePath, dataKeyPath, MockLoganne{}), map[string]ssh.PublicKey{user: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
+	defer closeServer()
+
+	privateKeyFile := "test.id_eddsa"
+	err := os.WriteFile("test.id_eddsa", clientPrivateKey, 0700)
+	assertNoError(test, err)
+
+	cmd := exec.Command(
+		"/usr/bin/ssh",
+		"-o BatchMode=yes",
+		"-o StrictHostKeyChecking=no",
+		"-o UserKnownHostsFile=/dev/null",
+		"-i"+privateKeyFile,
+		"-p "+port,
+		user+"@localhost",
+		"lucos_test_server/staging/SPECIAL=green",
+	)
+	cmd.Stderr = os.Stderr
+	cmd.Stdout = os.Stderr
+	err = cmd.Run()
+	assertNoError(test, err)
+
+	cmd = exec.Command(
+		"/usr/bin/ssh",
+		"-o BatchMode=yes",
+		"-o StrictHostKeyChecking=no",
+		"-o UserKnownHostsFile=/dev/null",
+		"-i"+privateKeyFile,
+		"-p "+port,
+		user+"@localhost",
+		"lucos_test_server/staging/SPECIAL=",
+	)
+	cmd.Stderr = os.Stderr
+	cmd.Stdout = os.Stderr
+	err = cmd.Run()
+	assertNoError(test, err)
+
+	testFileName := "test.env"
+	defer os.Remove(testFileName)
+	cmd = exec.Command(
+		"/usr/bin/scp",
+		"-s", // Needed for OpenSSH 8.9 which doesn't default to SFTP (can remove for OpenSSH9.0 and above)
+		"-o BatchMode=yes",
+		"-o StrictHostKeyChecking=no",
+		"-o UserKnownHostsFile=/dev/null",
+		"-i"+privateKeyFile,
+		"-P "+port,
+		user+"@localhost:lucos_test_server/staging/.env",
+		testFileName, // would prefer to send straight to /dev/stdout, then read cmd.Output(), but that causes weird errors on my laptop
+	);
+	cmd.Stderr = os.Stderr
+	cmd.Stdout = os.Stderr
+	err = cmd.Run()
+	assertNoError(test, err)
+	contents, err := os.ReadFile(testFileName)
+	assertNoError(test, err)
+	err = os.Remove(privateKeyFile)
+	assertNoError(test, err)
+
+	assertEqual(test, "Unexpected .env contents", "ENVIRONMENT=\"staging\"\n", string(contents))
 }

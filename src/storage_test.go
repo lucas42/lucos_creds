@@ -27,6 +27,7 @@ func TestUpdatingCredentialNotifiesLoganne(test *testing.T) {
 	datastore := initDatastore(datastorePath, dataKeyPath, MockLoganne{})
 	datastore.updateCredential("lucos_test", "testing", "SPECIAL_KEY", "lavender")
 	assertEqual(test, "Wrong number of calls to loganne", 1, loganneRequestCount)
+	assertEqual(test, "Wrong call type to loganne", "credentialUpdated", lastLoganneType)
 	assertEqual(test, "Wrong system sent to loganne", "lucos_test", lastLoganneSystem)
 	assertEqual(test, "Wrong environment sent to loganne", "testing", lastLoganneEnvironment)
 	assertEqual(test, "Wrong key sent to loganne", "SPECIAL_KEY", lastLoganneKey)
@@ -151,6 +152,7 @@ func TestUpdatingLinkedCredentialNotifiesLoganne(test *testing.T) {
 	datastore := initDatastore(datastorePath, dataKeyPath, MockLoganne{})
 	datastore.updateLinkedCredential("lucos_test_client", "testing", "lucos_test_server", "testing")
 	assertEqual(test, "Wrong number of calls to loganne", 2, loganneRequestCount)
+	assertEqual(test, "Wrong call type to loganne", "credentialUpdated", lastLoganneType)
 	assertEqual(test, "Wrong system sent to loganne", "lucos_test_server", lastLoganneSystem)
 	assertEqual(test, "Wrong environment sent to loganne", "testing", lastLoganneEnvironment)
 	assertEqual(test, "Wrong key sent to loganne", "CLIENT_KEYS", lastLoganneKey)
@@ -175,4 +177,61 @@ func TestBuiltInCredentials(test *testing.T) {
 	serverCreds, err := datastore.getAllCredentialsBySystemEnvironment("lucos_test", "testing")
 	assertNoError(test, err)
 	assertEqual(test, "Expected ENVIRONMENT variable to match requested environment", "testing", serverCreds["ENVIRONMENT"])
+}
+
+
+func TestDeletingCredentialIsTargettedCorrectly(test *testing.T) {
+	loganneRequestCount = 0
+	datastorePath := "test_db.sqlite"
+	dataKeyPath := "test_data.key"
+	defer os.Remove(datastorePath)
+	defer os.Remove(dataKeyPath)
+	datastore := initDatastore(datastorePath, dataKeyPath, MockLoganne{})
+	datastore.updateCredential("lucos_test", "testing", "SPECIAL_KEY", "turquoise")
+	datastore.updateCredential("lucos_test2", "testing", "SPECIAL_KEY", "lavender")
+	datastore.updateCredential("lucos_test", "staging", "SPECIAL_KEY", "hotpink")
+	datastore.updateCredential("lucos_test", "testing", "SPECIAL_CODE", "mint")
+	datastore.deleteCredential("lucos_test", "testing", "SPECIAL_KEY")
+
+	creds, err := datastore.getAllCredentialsBySystemEnvironment("lucos_test", "testing")
+	assertNoError(test, err)
+	assertMapNotContains(test, "Credential should have been deleted", "SPECIAL_KEY", creds)
+	assertMapContains(test, "Credential should not have been deleted", "SPECIAL_CODE", creds)
+	creds, err = datastore.getAllCredentialsBySystemEnvironment("lucos_test2", "testing")
+	assertNoError(test, err)
+	assertMapContains(test, "Credential should not have been deleted", "SPECIAL_KEY", creds)
+	creds, err = datastore.getAllCredentialsBySystemEnvironment("lucos_test", "staging")
+	assertNoError(test, err)
+	assertMapContains(test, "Credential should not have been deleted", "SPECIAL_KEY", creds)
+}
+
+func TestDeletingCredentialNotifiesLoganne(test *testing.T) {
+	loganneRequestCount = 0
+	datastorePath := "test_db.sqlite"
+	dataKeyPath := "test_data.key"
+	defer os.Remove(datastorePath)
+	defer os.Remove(dataKeyPath)
+	datastore := initDatastore(datastorePath, dataKeyPath, MockLoganne{})
+	datastore.updateCredential("lucos_test", "testing", "SPECIAL_KEY", "turquoise")
+	datastore.deleteCredential("lucos_test", "testing", "SPECIAL_KEY")
+	assertEqual(test, "Wrong number of calls to loganne", 2, loganneRequestCount)
+	assertEqual(test, "Wrong call type to loganne", "credentialDeleted", lastLoganneType)
+	assertEqual(test, "Wrong system sent to loganne", "lucos_test", lastLoganneSystem)
+	assertEqual(test, "Wrong environment sent to loganne", "testing", lastLoganneEnvironment)
+	assertEqual(test, "Wrong key sent to loganne", "SPECIAL_KEY", lastLoganneKey)
+}
+
+func TestRejectDeletionsWhichClashWithBuiltInOrLinkedCredentials(test *testing.T) {
+	datastorePath := "test_db.sqlite"
+	dataKeyPath := "test_data.key"
+	defer os.Remove(datastorePath)
+	defer os.Remove(dataKeyPath)
+	datastore := initDatastore(datastorePath, dataKeyPath, MockLoganne{})
+	err := datastore.deleteCredential("lucos_test", "testing", "KEY_LUCOS_TEST_SERVER")
+	assertNotEqual(test, "No error returned deleting a key beginning KEY_", nil, err)
+	err = datastore.deleteCredential("lucos_test", "testing", "CLIENT_KEYS")
+	assertNotEqual(test, "No error returned deleting key CLIENT_KEYS", nil, err)
+	err = datastore.deleteCredential("lucos_test", "testing", "ENVIRONMENT")
+	assertNotEqual(test, "No error returned deleting key ENVIRONMENT", nil, err)
+
 }
