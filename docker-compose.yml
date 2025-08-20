@@ -10,6 +10,15 @@ services:
     restart: always
     environment:
       - LOGANNE_HOST=https://loganne.l42.eu
+  lucos_creds_ui:
+    build: ui
+    container_name: lucos_creds_ui
+    ports:
+      - "8031:8031"
+    image: lucas42/lucos_creds_ui
+    restart: always
+    environment:
+      PORT: 8031
 
 volumes:
   store:
