@@ -1,6 +1,6 @@
 services:
   lucos_creds:
-    build: .
+    build: server
     container_name: lucos_creds
     ports: 
       - "2202:2202"

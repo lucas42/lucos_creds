@@ -14,7 +14,8 @@ A credential manager for lucos systems
 ## Running
 `docker compose up --build`
 
-## Testing
+## Testing (server module)
+Run from the `server` directory (`cd server`)
 Run `go test ./src`
 
 [![CircleCI](https://circleci.com/gh/lucas42/lucos_creds.svg?style=shield)](https://circleci.com/gh/lucas42/lucos_creds)
