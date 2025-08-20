@@ -2,6 +2,7 @@
   "name": "lucos_creds_ui",
   "version": "1.0.0",
   "description": "User Interface for lucos_creds",
+  "type": "module",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "echo \"//TODO: build job\"",
