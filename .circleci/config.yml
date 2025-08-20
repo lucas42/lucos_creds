@@ -9,6 +9,7 @@ jobs:
       GO111MODULE: auto
     steps:
       - checkout
+      - working_directory: server
       - run:
           name: Install Dependencies
           command: go get ./...
