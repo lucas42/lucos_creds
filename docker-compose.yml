@@ -18,7 +18,8 @@ services:
     image: lucas42/lucos_creds_ui
     restart: always
     environment:
-      PORT: 8031
+      - PORT=8031
+      - UI_PRIVATE_SSH_KEY
 
 volumes:
   store:
