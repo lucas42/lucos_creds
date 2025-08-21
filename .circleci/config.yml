@@ -7,9 +7,10 @@ jobs:
       - image: cimg/go:1.22
     environment:
       GO111MODULE: auto
-    working_directory: server
+    working_directory: ~/repo/server
     steps:
       - checkout
+        path: ~/repo
       - run:
           name: Install Dependencies
           command: go get ./...
