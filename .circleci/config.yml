@@ -9,7 +9,7 @@ jobs:
       GO111MODULE: auto
     working_directory: ~/repo/server
     steps:
-      - checkout
+      - checkout:
         path: ~/repo
       - run:
           name: Install Dependencies
