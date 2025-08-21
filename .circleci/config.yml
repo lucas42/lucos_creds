@@ -10,7 +10,7 @@ jobs:
     working_directory: ~/repo/server
     steps:
       - checkout:
-        path: ~/repo
+          path: ~/repo
       - run:
           name: Install Dependencies
           command: go get ./...
