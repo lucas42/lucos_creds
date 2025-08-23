@@ -84,7 +84,7 @@ func TestCreatingDataKey(test *testing.T) {
 
 	// Create another block cipher.  This should use the same key, so can decrypt something the first encrypted
 	secondBlockCipher := getCreateBlockCipher(filePath)
-	testCredential := Credential{PlainValue:"somereallysecretstuff"}
+	testCredential := SimpleCredential{PlainValue:"somereallysecretstuff"}
 	testCredential.encrypt(firstBlockCipher)
 	assertEqual(test, "encrypt function didn't blank plainvalue", "", testCredential.PlainValue)
 	testCredential.decrypt(secondBlockCipher)

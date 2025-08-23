@@ -22,7 +22,7 @@ func mockLoganneEvent(w http.ResponseWriter, request *http.Request) {
 
 var lastLoganneType string
 var lastLoganneMessage string
-var lastLoganneCredential Credential
+var lastLoganneCredential NormalisedCredential
 var lastLoganneSystem string
 var lastLoganneEnvironment string
 var lastLoganneKey string

@@ -69,7 +69,23 @@ func (store Datastore) TableExists(tablename string) (found bool) {
 	return
 }
 
-type Credential struct {
+/**
+ * Normalised Credentials represent how credentials are shown externally
+ * But they not how they're stored in the database
+ */
+type NormalisedCredential struct {
+	System      string `json:"system"`
+	Environment string `json:"environment"`
+	Key         string `json:"key"`
+	Type        string `json:"type,omitempty"`
+	Value       string `json:"value,omitempty"`
+}
+
+/**
+ * Represents how simple credentials are stored in the database
+ * Note plain values are never stored
+ */
+type SimpleCredential struct {
 	System         string `json:"system"`
 	Environment    string `json:"environment"`
 	Key            string `json:"key"`
@@ -77,6 +93,10 @@ type Credential struct {
 	PlainValue     string `json:"value_plain,omitempty"`
 }
 
+/**
+ * Represents how API keys between systems are stored in the database
+ * Note plain values are never stored
+ */
 type LinkedCredential struct {
 	ClientSystem      string `json:"client_system"`
 	ClientEnvironment string `json:"client_environment"`
@@ -91,7 +111,7 @@ type SystemEnvironment struct {
 	Environment string `json:"environment"`
 }
 
-func (credential *Credential) encrypt(dataBlockCipher cipher.AEAD) (err error) {
+func (credential *SimpleCredential) encrypt(dataBlockCipher cipher.AEAD) (err error) {
 	nonce := make([]byte, dataBlockCipher.NonceSize())
 	_, err = io.ReadFull(rand.Reader, nonce)
 	if err != nil {
@@ -102,7 +122,7 @@ func (credential *Credential) encrypt(dataBlockCipher cipher.AEAD) (err error) {
 	return
 }
 
-func (credential *Credential) decrypt(dataBlockCipher cipher.AEAD) (err error) {
+func (credential *SimpleCredential) decrypt(dataBlockCipher cipher.AEAD) (err error) {
 	nonce := credential.EncryptedValue[:dataBlockCipher.NonceSize()]
 	cipherText := credential.EncryptedValue[dataBlockCipher.NonceSize():]
 	plainBytes, err := dataBlockCipher.Open(nil, nonce, cipherText, nil)
@@ -119,76 +139,95 @@ func (credential *LinkedCredential) decrypt(dataBlockCipher cipher.AEAD) (err er
 }
 
 func (datastore Datastore) getAllCredentialsBySystemEnvironment(system string, environment string) (allCredentials map[string]string, err error) {
-	allCredentials, err = datastore.getSimpleCredentialsBySystemEnvironment(system, environment)
+	normalisedCredentials, err := datastore.getNormalisedCredentialsBySystemEnvironment(system, environment)
 	if err != nil {
-		slog.Warn("Failed to get Simple Credentials", "system", system, "environment", environment, slog.Any("error", err))
+		return
 	}
-	clientCredentials, err := datastore.getClientCredentialsBySystemEnvironment(system, environment)
-	if err != nil {
-		slog.Warn("Failed to get Client Credentials", "system", system, "environment", environment, slog.Any("error", err))
-	}
-	for key, value := range clientCredentials {
-		allCredentials[key] = value
-	}
-	serverCredentialCombinedValue, err := datastore.getServerCredentialsBySystemEnvironment(system, environment)
-	if err != nil {
-		slog.Warn("Failed to get Server Credentials", "system", system, "environment", environment, slog.Any("error", err))
-	}
-	if serverCredentialCombinedValue != "" {
-		allCredentials["CLIENT_KEYS"] = serverCredentialCombinedValue
-	}
-	builtInCredentials, err := datastore.getBuiltInCredentialsBySystemEnvironment(system, environment)
-	if err != nil {
-		slog.Warn("Failed to get Built-in Credentials", "system", system, "environment", environment, slog.Any("error", err))
-	}
-	for key, value := range builtInCredentials {
-		allCredentials[key] = value
+	allCredentials = make(map[string]string)
+	for _, credential := range normalisedCredentials {
+		allCredentials[credential.Key] = credential.Value
 	}
 	return
 }
-func (datastore Datastore) getSimpleCredentialsBySystemEnvironment(system string, environment string) (plainCredentials map[string]string, err error) {
-	plainCredentials = make(map[string]string)
-	credentialList := []Credential{}
+func (datastore Datastore) getNormalisedCredentialsBySystemEnvironment(system string, environment string) (allCredentials map[string]NormalisedCredential, err error) {
+	allCredentials = make(map[string]NormalisedCredential)
+
+	// Fetchers are called in order, with later ones overriding any previous credential with a clashing key
+	credentialFetchers := []func(string, string) ([]NormalisedCredential, error){
+		datastore.getSimpleCredentialsBySystemEnvironment,
+		datastore.getClientCredentialsBySystemEnvironment,
+		datastore.getServerCredentialsBySystemEnvironment,
+		datastore.getBuiltInCredentialsBySystemEnvironment,
+	}
+
+	for _, fetcher := range credentialFetchers {
+		credentials, fetchErr := fetcher(system, environment)
+		if fetchErr != nil {
+			slog.Warn("Failed to get some Credentials", "system", system, "environment", environment, slog.Any("error", err))
+			err = fetchErr
+			return
+		}
+		for _, credential := range credentials {
+			allCredentials[credential.Key] = credential
+		}
+	}
+	return
+}
+func (datastore Datastore) getSimpleCredentialsBySystemEnvironment(system string, environment string) (normalisedCredentials []NormalisedCredential, err error) {
+	credentialList := []SimpleCredential{}
 	err = datastore.db.Select(&credentialList, "SELECT * FROM credential WHERE system = $1 AND environment = $2 ORDER BY key", system, environment)
 	if err != nil {
 		slog.Warn("Failed to retrieve credentials from datastore", slog.Any("error", err))
 		return
 	}
+	normalisedCredentials = []NormalisedCredential{}
 	for _, credential := range credentialList {
 		err := credential.decrypt(datastore.dataBlockCipher)
 		if err != nil {
 			slog.Warn("Failed to decrypt", "key", credential.Key, slog.Any("error", err))
 		}
-		plainCredentials[credential.Key] = credential.PlainValue
+		normalisedCredentials = append(normalisedCredentials, NormalisedCredential{
+			Type: "simple",
+			System: credential.System,
+			Environment: credential.Environment,
+			Key: credential.Key,
+			Value: credential.PlainValue,
+		})
 	}
 	return
 }
-func (datastore Datastore) getClientCredentialsBySystemEnvironment(system string, environment string) (plainCredentials map[string]string, err error) {
-	plainCredentials = make(map[string]string)
+func (datastore Datastore) getClientCredentialsBySystemEnvironment(system string, environment string) (normalisedCredentials []NormalisedCredential, err error) {
 	linkedClientCredentialList := []LinkedCredential{}
 	err = datastore.db.Select(&linkedClientCredentialList, "SELECT * FROM linked_credential WHERE clientsystem = $1 AND clientenvironment = $2 ORDER BY serversystem", system, environment)
 	if err != nil {
 		slog.Warn("Failed to retrieve credentials from datastore", slog.Any("error", err))
 		return
 	}
+	normalisedCredentials = []NormalisedCredential{}
 	for _, clientCredential := range linkedClientCredentialList {
 		err := clientCredential.decrypt(datastore.dataBlockCipher)
 		if err != nil {
 			slog.Warn("Failed to decrypt", "clientCredential", clientCredential, slog.Any("error", err))
 		}
 		key := strings.ToUpper("key_"+clientCredential.ServerSystem)
-		plainCredentials[key] = clientCredential.PlainValue
+		normalisedCredentials = append(normalisedCredentials, NormalisedCredential{
+			Type: "client",
+			System: clientCredential.ClientSystem,
+			Environment: clientCredential.ClientEnvironment,
+			Key: key,
+			Value: clientCredential.PlainValue,
+		})
 	}
 	return
 }
-func (datastore Datastore) getServerCredentialsBySystemEnvironment(system string, environment string) (plainValue string, err error) {
-	plainValue = ""
+func (datastore Datastore) getServerCredentialsBySystemEnvironment(system string, environment string) (normalisedCredentials []NormalisedCredential, err error) {
 	linkedCredentialList := []LinkedCredential{}
 	err = datastore.db.Select(&linkedCredentialList, "SELECT * FROM linked_credential WHERE serversystem = $1 AND serverenvironment = $2 ORDER BY clientsystem", system, environment)
 	if err != nil {
 		slog.Warn("Failed to retrieve credentials from datastore", slog.Any("error", err))
 		return
 	}
+	plainValue := ""
 	for _, credential := range linkedCredentialList {
 		err := credential.decrypt(datastore.dataBlockCipher)
 		if err != nil {
@@ -199,16 +238,32 @@ func (datastore Datastore) getServerCredentialsBySystemEnvironment(system string
 		}
 		plainValue += fmt.Sprintf("%s:%s=%s", credential.ClientSystem, credential.ClientEnvironment, credential.PlainValue)
 	}
+	normalisedCredentials = []NormalisedCredential{}
+	if plainValue != "" {
+		normalisedCredentials = append(normalisedCredentials, NormalisedCredential{
+			Type: "server",
+			System: system,
+			Environment: environment,
+			Key: "CLIENT_KEYS",
+			Value: plainValue,
+		})
+	}
 	return
 }
-func (datastore Datastore) getBuiltInCredentialsBySystemEnvironment(system string, environment string) (plainCredentials map[string]string, err error) {
-	plainCredentials = make(map[string]string)
-	plainCredentials["ENVIRONMENT"] = environment
+func (datastore Datastore) getBuiltInCredentialsBySystemEnvironment(system string, environment string) (normalisedCredentials []NormalisedCredential, err error) {
+	normalisedCredentials = []NormalisedCredential{}
+	normalisedCredentials = append(normalisedCredentials, NormalisedCredential{
+		Type: "built-in",
+		System: system,
+		Environment: environment,
+		Key: "ENVIRONMENT",
+		Value: environment,
+	})
 	return
 }
 
 func (datastore Datastore) updateCredential(system string, environment string, key string, rawValue string) (err error) {
-	credential := Credential{}
+	credential := SimpleCredential{}
 	credential.System = system
 	credential.Environment = environment
 	credential.Key = strings.ToUpper(key) // Normalise all keys to only be uppercase
@@ -253,7 +308,7 @@ func (datastore Datastore) updateLinkedCredential(client_system string, client_e
 }
 
 func (datastore Datastore) deleteCredential(system string, environment string, key string) (err error) {
-	credential := Credential{}
+	credential := SimpleCredential{}
 	credential.System = system
 	credential.Environment = environment
 	credential.Key = strings.ToUpper(key) // Normalise all keys to only be uppercase

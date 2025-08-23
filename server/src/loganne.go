@@ -18,12 +18,11 @@ type Loganne struct {
 	host   string
 }
 
-func (loganne Loganne) post(eventType string, humanReadable string, credential Credential) {
+func (loganne Loganne) post(eventType string, humanReadable string, credential NormalisedCredential) {
 	url := loganne.host + "/events"
 
 	// Clear the value in the credential to ensure it doesn't get logged
-	credential.EncryptedValue = []byte{}
-	credential.PlainValue = ""
+	credential.Value = ""
 	slog.Debug("Posting to loganne", "eventType", eventType, "humanReadable", humanReadable, "url", url, "credential", credential)
 
 	data := map[string]interface{}{
@@ -41,13 +40,13 @@ func (loganne Loganne) post(eventType string, humanReadable string, credential C
 }
 
 func (loganne Loganne) postCredentialUpdated(system string, environment string, key string) {
-	credential := Credential{ System: system, Environment: environment, Key: key }
+	credential := NormalisedCredential{ System: system, Environment: environment, Key: key }
 	loganneMessage := fmt.Sprintf("Credential %s updated in %s (%s)", credential.Key, credential.System, credential.Environment)
 	loganne.post("credentialUpdated", loganneMessage, credential)
 }
 
 func (loganne Loganne) postCredentialDeleted(system string, environment string, key string) {
-	credential := Credential{ System: system, Environment: environment, Key: key }
+	credential := NormalisedCredential{ System: system, Environment: environment, Key: key }
 	loganneMessage := fmt.Sprintf("Credential %s deleted from %s (%s)", credential.Key, credential.System, credential.Environment)
 	loganne.post("credentialDeleted", loganneMessage, credential)
 }
