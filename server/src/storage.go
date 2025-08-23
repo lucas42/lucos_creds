@@ -86,6 +86,11 @@ type LinkedCredential struct {
 	PlainValue        string `json:"value_plain,omitempty"`
 }
 
+type SystemEnvironment struct {
+	System      string `json:"system"`
+	Environment string `json:"environment"`
+}
+
 func (credential *Credential) encrypt(dataBlockCipher cipher.AEAD) (err error) {
 	nonce := make([]byte, dataBlockCipher.NonceSize())
 	_, err = io.ReadFull(rand.Reader, nonce)
@@ -263,6 +268,16 @@ func (datastore Datastore) deleteCredential(system string, environment string, k
 	}
 	slog.Info("Deleted Credential", "credential", credential)
 	datastore.loganne.postCredentialDeleted(credential.System, credential.Environment, credential.Key)
+	return
+}
+
+func (datastore Datastore) getAllSystemEnvironments() (systemEnvironmentList []SystemEnvironment, err error) {
+	systemEnvironmentList =[]SystemEnvironment{}
+	err = datastore.db.Select(&systemEnvironmentList, "SELECT DISTINCT system, environment FROM credential UNION SELECT clientsystem, clientenvironment FROM linked_credential UNION SELECT serversystem, serverenvironment FROM linked_credential ORDER BY system, environment")
+	if err != nil {
+		slog.Warn("Failed to retrieve systemEnvironments from datastore", slog.Any("error", err))
+		return
+	}
 	return
 }
 

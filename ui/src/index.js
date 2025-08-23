@@ -21,7 +21,9 @@ app.get('/_info', catchErrors(async (req, res) => {
 		checks: {
 			"ssh-server": await checkServerConnection(),
 		},
-		metrics: {},
+		metrics: {
+			"systems": await getSystemMetric(),
+		},
 		ci: {
 			circle: "gh/lucas42/lucos_creds",
 		},
@@ -48,13 +50,16 @@ function catchErrors(controllerFunc) {
 	});
 }
 
+// Returns an array of objects listing available system/environment combos
+async function getSystemEnvironments() {
+	const output = await exec(`ssh -p 2202 lucos_creds ls`);
+	return JSON.parse(output.stdout);
+}
+
 // Returns an array of environment variable names which are set for a given system & environment
 async function getCredList(system, environment) {
-	const tmpfile = '/tmp/output' // TODO: change this each time to avoid clashes if running at same time
-	await exec(`scp -P 2202 lucos_creds:${system}/${environment}/.env ${tmpfile}`);
-	const data = await readFile(tmpfile, 'utf8');
-	await unlink(tmpfile);
-	return data.trim().split("\n").map(line => line.split("=")[0]);
+	const output = await exec(`ssh -p 2202 lucos_creds ls ${system}/${environment}`);
+	return JSON.parse(output.stdout);
 }
 
 async function checkServerConnection() {
@@ -71,5 +76,21 @@ async function checkServerConnection() {
 			debug: error.message,
 		}
 	}
-
+}
+async function getSystemMetric() {
+	let value = 0;
+	try {
+		const systemEnvironments = await getSystemEnvironments();
+		const systems = [];
+		systemEnvironments.forEach(systemEnvironment => {
+			systems[systemEnvironment.system] = true;
+		});
+		value = Object.keys(systems).length;
+	} catch (error) {
+		console.warn('Error getting System Metric, returning 0', error);
+	}
+	return {
+		techDetail: `Number of different systems which have credentials stored against`,
+		value,
+	}
 }

@@ -235,3 +235,32 @@ func TestRejectDeletionsWhichClashWithBuiltInOrLinkedCredentials(test *testing.T
 	assertNotEqual(test, "No error returned deleting key ENVIRONMENT", nil, err)
 
 }
+
+func TestListingSystemEnvironments(test *testing.T) {
+	datastorePath := "test_db.sqlite"
+	dataKeyPath := "test_data.key"
+	defer os.Remove(datastorePath)
+	defer os.Remove(dataKeyPath)
+	datastore := initDatastore(datastorePath, dataKeyPath, MockLoganne{})
+	datastore.updateCredential("lucos_test", "testing", "SPECIAL_KEY", "turquoise")
+	datastore.updateCredential("lucos_test", "testing", "SPECIAL_CODE", "seven")
+	datastore.updateCredential("lucos_test2", "testing", "SPECIAL_KEY", "lavender")
+	datastore.updateCredential("lucos_test", "staging", "SPECIAL_CODE", "hotpink")
+	datastore.updateCredential("lucos_mixed", "testing", "SPECIAL_CODE", "mint")
+	datastore.updateLinkedCredential("lucos_test_client1", "testing", "lucos_test_server1", "testing")
+	datastore.updateLinkedCredential("lucos_mixed", "testing", "lucos_test_server2", "testing")
+
+	actual, err := datastore.getAllSystemEnvironments()
+	assertNoError(test, err)
+	expected := []SystemEnvironment{
+		SystemEnvironment { System: "lucos_mixed", Environment: "testing"},
+		SystemEnvironment { System: "lucos_test", Environment: "staging"},
+		SystemEnvironment { System: "lucos_test", Environment: "testing"},
+		SystemEnvironment { System: "lucos_test2", Environment: "testing"},
+		SystemEnvironment { System: "lucos_test_client1", Environment: "testing"},
+		SystemEnvironment { System: "lucos_test_server1", Environment: "testing"},
+		SystemEnvironment { System: "lucos_test_server2", Environment: "testing"},
+	}
+
+	assertEqual(test, "Wrong list of system environments returned", expected, actual)
+}

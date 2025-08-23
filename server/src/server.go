@@ -2,11 +2,13 @@ package main
 import (
 	"context"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net"
 	"os"
+	"sort"
 	"strings"
 	"golang.org/x/crypto/ssh"
 )
@@ -51,7 +53,60 @@ func handleSshConnection(connection net.Conn, config *ssh.ServerConfig, datastor
 					break
 				}
 				if (req.Type == "exec") {
-					if (strings.Contains(payload.Data, "=>")) {
+					if (strings.HasPrefix(payload.Data, "ls")) {
+						var exitStatus struct {
+							code uint32
+						}
+						command := strings.TrimSpace(strings.TrimPrefix(payload.Data, "ls"))
+						if command == "" {
+							systemEnvironments, err := datastore.getAllSystemEnvironments()
+							if err != nil {
+								exitStatus.code = 1
+							}
+							output, err := json.Marshal(systemEnvironments)
+							if err != nil {
+								exitStatus.code = 2
+							}
+							output = append(output, '\n')
+							channel.Write(output)
+							req.Reply(true, nil)
+							_, err = channel.SendRequest("exit-status", false, ssh.Marshal(exitStatus))
+							if err != nil {
+								slog.Warn("Couldn't send exit-status", slog.Any("error", err))
+							}
+							channel.Close()
+						} else {
+							commandParts := strings.Split(command, "/")
+							if len(commandParts) != 2 {
+								slog.Warn("Invalid exec payload.  Rejecting request.", "payload", payload.Data, slog.Any("error", err))
+								exitStatus.code = 3
+							} else {
+								system := commandParts[0]
+								environment := commandParts[1]
+								credentialList, err := datastore.getAllCredentialsBySystemEnvironment(system, environment)
+								if err != nil {
+									exitStatus.code = 1
+								}
+								credentialKeys := []string{}
+								for key, _ := range credentialList {
+									credentialKeys = append(credentialKeys, key)
+								}
+								sort.Strings(credentialKeys)
+								output, err := json.Marshal(credentialKeys)
+								if err != nil {
+									exitStatus.code = 2
+								}
+								output = append(output, '\n')
+								channel.Write(output)
+								req.Reply(true, nil)
+								_, err = channel.SendRequest("exit-status", false, ssh.Marshal(exitStatus))
+								if err != nil {
+									slog.Warn("Couldn't send exit-status", slog.Any("error", err))
+								}
+							}
+							channel.Close()
+						}
+					} else if (strings.Contains(payload.Data, "=>")) {
 						linkedCredentialParts := strings.Split(payload.Data, "=>")
 						if (len(linkedCredentialParts) != 2) {
 							slog.Warn("Invalid exec payload.  Rejecting request.", "payload", payload.Data, slog.Any("error", err))

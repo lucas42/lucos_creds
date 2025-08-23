@@ -1,5 +1,6 @@
 package main
 import (
+	"io"
 	"os"
 	"os/exec"
 	"reflect"
@@ -502,4 +503,79 @@ func TestDeleteCredentialOverSSH(test *testing.T) {
 	assertNoError(test, err)
 
 	assertEqual(test, "Unexpected .env contents", "ENVIRONMENT=\"staging\"\n", string(contents))
+}
+func TestLsOverSSH(test *testing.T) {
+	port := "2222"
+	user := "bob"
+	datastorePath := "test_db.sqlite"
+	dataKeyPath := "test_data.key"
+	defer os.Remove(datastorePath)
+	defer os.Remove(dataKeyPath)
+	serverSigner, _ := getKeyAndSigner(test)
+	clientSigner, clientPrivateKey := getKeyAndSigner(test)
+	_, closeServer := startSftpServer(port, serverSigner, initDatastore(datastorePath, dataKeyPath, MockLoganne{}), map[string]ssh.PublicKey{user: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
+	defer closeServer()
+
+	privateKeyFile := "test.id_eddsa"
+	err := os.WriteFile("test.id_eddsa", clientPrivateKey, 0700)
+	assertNoError(test, err)
+	defer os.Remove(privateKeyFile)
+
+
+	cmd := exec.Command(
+		"/usr/bin/ssh",
+		"-o BatchMode=yes",
+		"-o StrictHostKeyChecking=no",
+		"-o UserKnownHostsFile=/dev/null",
+		"-i"+privateKeyFile,
+		"-p "+port,
+		user+"@localhost",
+		"lucos_test/production/SINGLE_KEY=lilac",
+	)
+	cmd.Stderr = os.Stderr
+	cmd.Stdout = os.Stderr
+	err = cmd.Run()
+	assertNoError(test, err)
+
+	cmd = exec.Command(
+		"/usr/bin/ssh",
+		"-o BatchMode=yes",
+		"-o StrictHostKeyChecking=no",
+		"-o UserKnownHostsFile=/dev/null",
+		"-i"+privateKeyFile,
+		"-p "+port,
+		user+"@localhost",
+		"ls",
+	)
+	stdout, err := cmd.StdoutPipe()
+	assertNoError(test, err)
+	cmd.Stderr = os.Stderr
+	err = cmd.Start()
+	assertNoError(test, err)
+	output, err := io.ReadAll(stdout)
+	assertNoError(test, err)
+	err = cmd.Wait()
+	assertNoError(test, err)
+	assertEqual(test, "wrong output from ls", "[{\"system\":\"lucos_test\",\"environment\":\"production\"}]\n", string(output))
+
+	cmd = exec.Command(
+		"/usr/bin/ssh",
+		"-o BatchMode=yes",
+		"-o StrictHostKeyChecking=no",
+		"-o UserKnownHostsFile=/dev/null",
+		"-i"+privateKeyFile,
+		"-p "+port,
+		user+"@localhost",
+		"ls lucos_test/production",
+	)
+	stdout, err = cmd.StdoutPipe()
+	assertNoError(test, err)
+	cmd.Stderr = os.Stderr
+	err = cmd.Start()
+	assertNoError(test, err)
+	output, err = io.ReadAll(stdout)
+	assertNoError(test, err)
+	err = cmd.Wait()
+	assertNoError(test, err)
+	assertEqual(test, "ls lucos_test/production", "[\"ENVIRONMENT\",\"SINGLE_KEY\"]\n", string(output))
 }
