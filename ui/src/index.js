@@ -12,6 +12,7 @@ app.auth = authMiddleware;
 const port = process.env.PORT || 3000;
 fs.writeFileSync('/root/.ssh/id_ed25519', process.env.UI_PRIVATE_SSH_KEY.replaceAll('~','=').replaceAll('\\n', '\n'));
 
+app.set('view engine', 'ejs');
 app.use(express.json());
 
 // Avoid authentication for _info, so call before invoking auth middleware
@@ -37,9 +38,24 @@ app.use((req, res, next) => app.auth(req, res, next));
 
 app.get('/', catchErrors(async (req, res) => {
 	const systemEnvironments = await getSystemEnvironments();
-	const output = systemEnvironments.map(item => `${item.system}/${item.environment}`).join("\n");
-	res.type("text");
-	res.send('Hello World!\n\n'+output);
+	const systems = {};
+	systemEnvironments.forEach(item => {
+		if (!(item.system in systems)) systems[item.system] = {
+			'code': item.system,
+			'environments': []
+		}
+		systems[item.system].environments.push(item.environment);
+	});
+	res.render('index', {systems});
+}));
+
+app.get('/system/:system/:environment', catchErrors(async (req, res) => {
+	const creds = await getCredList(req.params.system, req.params.environment);
+	res.render('cred-list', {
+		creds,
+		system: req.params.system,
+		environment: req.params.environment,
+	});
 }));
 
 app.listen(port, () => {
