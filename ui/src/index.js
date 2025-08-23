@@ -35,9 +35,12 @@ app.get('/_info', catchErrors(async (req, res) => {
 
 app.use((req, res, next) => app.auth(req, res, next));
 
-app.get('/', (req, res) => {
-	res.send('Hello World!')
-});
+app.get('/', catchErrors(async (req, res) => {
+	const systemEnvironments = await getSystemEnvironments();
+	const output = systemEnvironments.map(item => `${item.system}/${item.environment}`).join("\n");
+	res.type("text");
+	res.send('Hello World!\n\n'+output);
+}));
 
 app.listen(port, () => {
 	console.log(`UI listening on port ${port}`)
