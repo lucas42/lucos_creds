@@ -577,5 +577,5 @@ func TestLsOverSSH(test *testing.T) {
 	assertNoError(test, err)
 	err = cmd.Wait()
 	assertNoError(test, err)
-	assertEqual(test, "ls lucos_test/production", "[\"ENVIRONMENT\",\"SINGLE_KEY\"]\n", string(output))
+	assertEqual(test, "ls lucos_test/production", "{\"ENVIRONMENT\":{\"system\":\"lucos_test\",\"environment\":\"production\",\"key\":\"ENVIRONMENT\",\"type\":\"built-in\"},\"SINGLE_KEY\":{\"system\":\"lucos_test\",\"environment\":\"production\",\"key\":\"SINGLE_KEY\",\"type\":\"simple\"}}\n", string(output))
 }

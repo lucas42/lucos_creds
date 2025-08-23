@@ -4,8 +4,8 @@
 		<h1><%= system.replace("_", " ") %>: <%= environment %></h1>
 		<h2>Environment Variables Currently Set</h2>
 		<ul>
-			<% for(var ii = 0; ii < creds.length; ii++) { %>
-			<li><%= creds[ii] %></li>
+			<% for(const key in creds) { %>
+			<li><%= key %> (<%= creds[key].type %>)</li>
 			<% } %>
 		</ul>
 	</body>

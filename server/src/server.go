@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"net"
 	"os"
-	"sort"
 	"strings"
 	"golang.org/x/crypto/ssh"
 )
@@ -83,16 +82,15 @@ func handleSshConnection(connection net.Conn, config *ssh.ServerConfig, datastor
 							} else {
 								system := commandParts[0]
 								environment := commandParts[1]
-								credentialList, err := datastore.getAllCredentialsBySystemEnvironment(system, environment)
+								credentialList, err := datastore.getNormalisedCredentialsBySystemEnvironment(system, environment)
 								if err != nil {
 									exitStatus.code = 1
 								}
-								credentialKeys := []string{}
-								for key, _ := range credentialList {
-									credentialKeys = append(credentialKeys, key)
+								for key, credential := range credentialList {
+									credential.Value = ""
+									credentialList[key] = credential
 								}
-								sort.Strings(credentialKeys)
-								output, err := json.Marshal(credentialKeys)
+								output, err := json.Marshal(credentialList)
 								if err != nil {
 									exitStatus.code = 2
 								}
