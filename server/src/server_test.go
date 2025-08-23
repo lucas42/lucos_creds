@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"reflect"
 	"runtime/debug"
+	"log/slog"
 	"strings"
 	"testing"
 	"golang.org/x/crypto/ssh"
@@ -37,6 +38,12 @@ func assertMapNotContains(test *testing.T, message string, expected string, actu
 	if contains {
 		test.Errorf("%s. Expected key: %s found in map: %s", message, expected, actual)
 	}
+}
+
+func TestMain(m *testing.M) {
+	// Replace the default logger with a no-op logger
+	slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	os.Exit(m.Run())
 }
 
 /**
@@ -76,8 +83,6 @@ func TestWriteReadEnvFile(test *testing.T) {
 		user+"@localhost",
 		"lucos_test/production/BORING_KEY=yellow",
 	)
-	cmd.Stderr = os.Stderr
-	cmd.Stdout = os.Stderr
 	err = cmd.Run()
 	assertNoError(test, err)
 
@@ -91,8 +96,6 @@ func TestWriteReadEnvFile(test *testing.T) {
 		user+"@localhost",
 		"lucos_test/production/OTHERKEY=green",
 	)
-	cmd.Stderr = os.Stderr
-	cmd.Stdout = os.Stderr
 	err = cmd.Run()
 	assertNoError(test, err)
 
@@ -108,8 +111,6 @@ func TestWriteReadEnvFile(test *testing.T) {
 		user+"@localhost:lucos_test/production/.env",
 		testFileName, // would prefer to send straight to /dev/stdout, then read cmd.Output(), but that causes weird errors on my laptop
 	);
-	cmd.Stderr = os.Stderr
-	cmd.Stdout = os.Stderr
 	err = cmd.Run()
 	assertNoError(test, err)
 	contents, err := os.ReadFile(testFileName)
@@ -148,8 +149,6 @@ func TestReadMissingFile(test *testing.T) {
 		user+"@localhost:unknown_file.txt",
 		"/dev/null", // would prefer to send straight to /dev/stdout, then read cmd.Output(), but that causes weird errors on my laptop
 	);
-	cmd.Stderr = os.Stderr
-	cmd.Stdout = os.Stderr
 	err = cmd.Run()
 	if err == nil {
 		test.Errorf("No error returned requesting missing file %s", err)
@@ -184,8 +183,6 @@ func TestInvalidUser(test *testing.T) {
 		"bobby@localhost:.env",
 		"/dev/null", // would prefer to send straight to /dev/stdout, then read cmd.Output(), but that causes weird errors on my laptop
 	);
-	cmd.Stderr = os.Stderr
-	cmd.Stdout = os.Stderr
 	err = cmd.Run()
 	if err == nil {
 		test.Errorf("No error returned for invalid user %s", err)
@@ -220,8 +217,6 @@ func TestWrongKey(test *testing.T) {
 		user+"@localhost:.env",
 		"/dev/null", // would prefer to send straight to /dev/stdout, then read cmd.Output(), but that causes weird errors on my laptop
 	);
-	cmd.Stderr = os.Stderr
-	cmd.Stdout = os.Stderr
 	err = cmd.Run()
 	if err == nil {
 		test.Errorf("No error returned for wrong key %s", err)
@@ -256,8 +251,6 @@ func TestDifferentUsersKey(test *testing.T) {
 		"bob@localhost:.env",
 		"/dev/null", // would prefer to send straight to /dev/stdout, then read cmd.Output(), but that causes weird errors on my laptop
 	);
-	cmd.Stderr = os.Stderr
-	cmd.Stdout = os.Stderr
 	err = cmd.Run()
 	if err == nil {
 		test.Errorf("No error returned for switched key %s", err)
@@ -291,8 +284,6 @@ func TestStatePersistsRestart(test *testing.T) {
 		user+"@localhost",
 		"lucos_test/production/BORING_KEY=yellow",
 	)
-	cmd.Stderr = os.Stderr
-	cmd.Stdout = os.Stderr
 	err = cmd.Run()
 	assertNoError(test, err)
 
@@ -310,8 +301,6 @@ func TestStatePersistsRestart(test *testing.T) {
 		user+"@localhost",
 		"lucos_test/production/OTHERKEY=green",
 	)
-	cmd.Stderr = os.Stderr
-	cmd.Stdout = os.Stderr
 	err = cmd.Run()
 	assertNoError(test, err)
 
@@ -327,8 +316,6 @@ func TestStatePersistsRestart(test *testing.T) {
 		user+"@localhost:lucos_test/production/.env",
 		testFileName, // would prefer to send straight to /dev/stdout, then read cmd.Output(), but that causes weird errors on my laptop
 	);
-	cmd.Stderr = os.Stderr
-	cmd.Stdout = os.Stderr
 	err = cmd.Run()
 	assertNoError(test, err)
 	contents, err := os.ReadFile(testFileName)
@@ -366,8 +353,6 @@ func TestCreateLinkedCredentialOverSSH(test *testing.T) {
 		user+"@localhost",
 		"lucos_test_client/production => lucos_test_server/production",
 	)
-	cmd.Stderr = os.Stderr
-	cmd.Stdout = os.Stderr
 	err = cmd.Run()
 	assertNoError(test, err)
 
@@ -381,8 +366,6 @@ func TestCreateLinkedCredentialOverSSH(test *testing.T) {
 		user+"@localhost",
 		"lucos_test_server/production/OTHERKEY=green",
 	)
-	cmd.Stderr = os.Stderr
-	cmd.Stdout = os.Stderr
 	err = cmd.Run()
 	assertNoError(test, err)
 
@@ -399,8 +382,6 @@ func TestCreateLinkedCredentialOverSSH(test *testing.T) {
 		user+"@localhost:lucos_test_client/production/.env",
 		testFileName, // would prefer to send straight to /dev/stdout, then read cmd.Output(), but that causes weird errors on my laptop
 	);
-	cmd.Stderr = os.Stderr
-	cmd.Stdout = os.Stderr
 	err = cmd.Run()
 	assertNoError(test, err)
 	contents, err := os.ReadFile(testFileName)
@@ -423,8 +404,6 @@ func TestCreateLinkedCredentialOverSSH(test *testing.T) {
 		user+"@localhost:lucos_test_server/production/.env",
 		testFileName, // would prefer to send straight to /dev/stdout, then read cmd.Output(), but that causes weird errors on my laptop
 	);
-	cmd.Stderr = os.Stderr
-	cmd.Stdout = os.Stderr
 	err = cmd.Run()
 	assertNoError(test, err)
 	contents, err = os.ReadFile(testFileName)
@@ -460,8 +439,6 @@ func TestDeleteCredentialOverSSH(test *testing.T) {
 		user+"@localhost",
 		"lucos_test_server/staging/SPECIAL=green",
 	)
-	cmd.Stderr = os.Stderr
-	cmd.Stdout = os.Stderr
 	err = cmd.Run()
 	assertNoError(test, err)
 
@@ -475,8 +452,6 @@ func TestDeleteCredentialOverSSH(test *testing.T) {
 		user+"@localhost",
 		"lucos_test_server/staging/SPECIAL=",
 	)
-	cmd.Stderr = os.Stderr
-	cmd.Stdout = os.Stderr
 	err = cmd.Run()
 	assertNoError(test, err)
 
@@ -493,8 +468,6 @@ func TestDeleteCredentialOverSSH(test *testing.T) {
 		user+"@localhost:lucos_test_server/staging/.env",
 		testFileName, // would prefer to send straight to /dev/stdout, then read cmd.Output(), but that causes weird errors on my laptop
 	);
-	cmd.Stderr = os.Stderr
-	cmd.Stdout = os.Stderr
 	err = cmd.Run()
 	assertNoError(test, err)
 	contents, err := os.ReadFile(testFileName)
@@ -532,8 +505,6 @@ func TestLsOverSSH(test *testing.T) {
 		user+"@localhost",
 		"lucos_test/production/SINGLE_KEY=lilac",
 	)
-	cmd.Stderr = os.Stderr
-	cmd.Stdout = os.Stderr
 	err = cmd.Run()
 	assertNoError(test, err)
 
@@ -549,7 +520,6 @@ func TestLsOverSSH(test *testing.T) {
 	)
 	stdout, err := cmd.StdoutPipe()
 	assertNoError(test, err)
-	cmd.Stderr = os.Stderr
 	err = cmd.Start()
 	assertNoError(test, err)
 	output, err := io.ReadAll(stdout)
@@ -570,7 +540,6 @@ func TestLsOverSSH(test *testing.T) {
 	)
 	stdout, err = cmd.StdoutPipe()
 	assertNoError(test, err)
-	cmd.Stderr = os.Stderr
 	err = cmd.Start()
 	assertNoError(test, err)
 	output, err = io.ReadAll(stdout)
