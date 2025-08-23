@@ -1,5 +1,11 @@
 <html>
+	<head>
+		<title>LucOs Credentials - <%= system %>: <%= environment %></title>
+		<meta name="viewport" content="initial-scale=1.0, user-scalable=no, width=device-width" />
+		<link href="/style.css" rel="stylesheet">
+	</head>
 	<body>
+		<lucos-navbar>Credential List</lucos-navbar>
 		<a href="/">&lt;- Home</a>
 		<h1><%= system.replace("_", " ") %>: <%= environment %></h1>
 		<h2>Environment Variables Currently Set</h2>
@@ -8,5 +14,6 @@
 			<li><%= key %> (<%= creds[key].type %>)</li>
 			<% } %>
 		</ul>
+		<script type="text/javascript" src="/client.js"></script>
 	</body>
 </html>

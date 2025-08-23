@@ -14,6 +14,7 @@ fs.writeFileSync('/root/.ssh/id_ed25519', process.env.UI_PRIVATE_SSH_KEY.replace
 
 app.set('view engine', 'ejs');
 app.use(express.json());
+app.use(express.static('./resources', {extensions: ['json']}));
 
 // Avoid authentication for _info, so call before invoking auth middleware
 app.get('/_info', catchErrors(async (req, res) => {

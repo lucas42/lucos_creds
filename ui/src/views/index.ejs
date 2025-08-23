@@ -1,10 +1,15 @@
 <html>
+	<head>
+		<title>LucOs Credentials</title>
+		<meta name="viewport" content="initial-scale=1.0, user-scalable=no, width=device-width" />
+		<link href="/style.css" rel="stylesheet">
+	</head>
 	<body>
-		Hello World <br/>
+		<lucos-navbar>Credentials</lucos-navbar>
 		<% for(const systemid in systems) {
 			const system = systems[systemid];
 			%>
-			<h2><%= system.code %></h2>
+			<h2><%= system.code.replace("_", " ") %></h2>
 			Environments:
 			<ul>
 				<% for(var ii = 0; ii < system.environments.length; ii++) {
@@ -14,5 +19,6 @@
 				<% } %>
 			</ul>
 		<%} %>
+		<script type="text/javascript" src="/client.js"></script>
 	</body>
 </html>
