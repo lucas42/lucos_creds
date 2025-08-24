@@ -12,6 +12,13 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
+const (
+	StatusOk = 0              // Everything went as expected
+	StatusBadSyntax = 1       // The call to the server wasn't understood
+	StatusValidationError = 4 // The call asked to do something which isn't allowed
+	StatusInternalError = 5   // The request couldn't be fufilled because of an error in the server
+)
+
 func handleSshConnection(connection net.Conn, config *ssh.ServerConfig, datastore Datastore) {
 	slog.Debug("New connection received")
 	sshConnection, channels, globalRequests, err := ssh.NewServerConn(connection, config)
@@ -55,30 +62,34 @@ func handleSshConnection(connection net.Conn, config *ssh.ServerConfig, datastor
 					var exitStatus struct {
 						code uint32
 					}
+					exitStatus.code = StatusOk // Default to the everything being okay
 					if (strings.HasPrefix(payload.Data, "ls")) {
 						command := strings.TrimSpace(strings.TrimPrefix(payload.Data, "ls"))
 						if command == "" {
 							systemEnvironments, err := datastore.getAllSystemEnvironments()
 							if err != nil {
-								exitStatus.code = 5
+								exitStatus.code = StatusInternalError
+								slog.Warn("Failed to get systemEnvironments", slog.Any("error", err))
 							}
 							output, err := json.Marshal(systemEnvironments)
 							if err != nil {
-								exitStatus.code = 5
+								exitStatus.code = StatusInternalError
+								slog.Warn("Failed to marshal JSON", slog.Any("error", err))
 							}
 							output = append(output, '\n')
 							channel.Write(output)
 						} else {
 							commandParts := strings.Split(command, "/")
 							if len(commandParts) != 2 {
-								slog.Warn("Invalid exec payload.  Rejecting request.", "payload", payload.Data, slog.Any("error", err))
-								exitStatus.code = 1
+								exitStatus.code = StatusBadSyntax
+								channel.Write([]byte("Syntax Error: Unexpected number of slashes\n"))
 							} else {
 								system := commandParts[0]
 								environment := commandParts[1]
 								credentialList, err := datastore.getNormalisedCredentialsBySystemEnvironment(system, environment)
 								if err != nil {
-									exitStatus.code = 5
+									exitStatus.code = StatusInternalError
+									slog.Warn("Failed to get credentials", slog.Any("error", err))
 								}
 								for key, credential := range credentialList {
 									credential.Value = ""
@@ -86,7 +97,8 @@ func handleSshConnection(connection net.Conn, config *ssh.ServerConfig, datastor
 								}
 								output, err := json.Marshal(credentialList)
 								if err != nil {
-									exitStatus.code = 5
+									exitStatus.code = StatusInternalError
+									slog.Warn("Failed to marshal JSON", slog.Any("error", err))
 								}
 								output = append(output, '\n')
 								channel.Write(output)
@@ -95,19 +107,20 @@ func handleSshConnection(connection net.Conn, config *ssh.ServerConfig, datastor
 					} else if (strings.Contains(payload.Data, "=>")) {
 						linkedCredentialParts := strings.Split(payload.Data, "=>")
 						if (len(linkedCredentialParts) != 2) {
-							slog.Warn("Invalid exec payload.  Rejecting request.", "payload", payload.Data, slog.Any("error", err))
-							exitStatus.code = 1
+							exitStatus.code = StatusBadSyntax
+							channel.Write([]byte("Syntax Error: Unexpected number of arrows\n"))
 						} else {
 							clientParts := strings.Split(strings.TrimSpace(linkedCredentialParts[0]), "/")
 							serverParts := strings.Split(strings.TrimSpace(linkedCredentialParts[1]), "/")
 							if (len(clientParts) != 2 || len(serverParts) != 2) {
-								slog.Warn("Invalid exec payload.  Rejecting request.", "payload", payload.Data, slog.Any("error", err))
-								exitStatus.code = 1
+								exitStatus.code = StatusBadSyntax
+								channel.Write([]byte("Syntax Error: Unexpected number of slashes\n"))
 							} else {
 								slog.Debug("Accepting exec linked credential request", "client", clientParts, "server", serverParts)
 								err := datastore.updateLinkedCredential(clientParts[0], clientParts[1], serverParts[0], serverParts[1])
 								if err != nil {
-									exitStatus.code = 5
+									exitStatus.code = StatusInternalError
+									slog.Warn("Failed to update linked credential", slog.Any("error", err))
 								}
 							}
 						}
@@ -115,8 +128,8 @@ func handleSshConnection(connection net.Conn, config *ssh.ServerConfig, datastor
 						payloadParts := strings.Split(payload.Data, "=")
 						isValid, system, environment, key := parseFileHandle(payloadParts[0])
 						if (len(payloadParts) != 2 || !isValid) {
-							exitStatus.code = 4
-							channel.Write([]byte("Invalid update syntax\n"))
+							exitStatus.code = StatusBadSyntax
+							channel.Write([]byte("Syntax Error: Unexpected number of slashes\n"))
 						} else {
 							value := payloadParts[1]
 							slog.Debug("Accepting exec request", "system", system, "environment", environment, "key", key, "value", "****")
@@ -128,11 +141,11 @@ func handleSshConnection(connection net.Conn, config *ssh.ServerConfig, datastor
 								err = datastore.deleteCredential(system, environment, key)
 							}
 							if (err != nil && err.Error() == "Invalid Key") {
-								exitStatus.code = 4
+								exitStatus.code = StatusValidationError
 								channel.Write([]byte("Invalid Key\n"))
 							} else if err != nil {
-								exitStatus.code = 5
-								slog.Warn("Failed to update credential", slog.Any("error", err))
+								exitStatus.code = StatusInternalError
+								slog.Warn("Failed to update simple credential", slog.Any("error", err))
 							}
 						}
 					}

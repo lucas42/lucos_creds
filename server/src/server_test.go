@@ -548,3 +548,111 @@ func TestLsOverSSH(test *testing.T) {
 	assertNoError(test, err)
 	assertEqual(test, "ls lucos_test/production", "{\"ENVIRONMENT\":{\"system\":\"lucos_test\",\"environment\":\"production\",\"key\":\"ENVIRONMENT\",\"type\":\"built-in\"},\"SINGLE_KEY\":{\"system\":\"lucos_test\",\"environment\":\"production\",\"key\":\"SINGLE_KEY\",\"type\":\"simple\"}}\n", string(output))
 }
+func TestSyntaxError(test *testing.T) {
+	port := "2222"
+	user := "bob"
+	datastorePath := "test_db.sqlite"
+	dataKeyPath := "test_data.key"
+	defer os.Remove(datastorePath)
+	defer os.Remove(dataKeyPath)
+	serverSigner, _ := getKeyAndSigner(test)
+	clientSigner, clientPrivateKey := getKeyAndSigner(test)
+	_, closeServer := startSftpServer(port, serverSigner, initDatastore(datastorePath, dataKeyPath, MockLoganne{}), map[string]ssh.PublicKey{user: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
+	defer closeServer()
+
+	privateKeyFile := "test.id_eddsa"
+	err := os.WriteFile("test.id_eddsa", clientPrivateKey, 0700)
+	assertNoError(test, err)
+	defer os.Remove(privateKeyFile)
+
+
+	cmd := exec.Command(
+		"/usr/bin/ssh",
+		"-o BatchMode=yes",
+		"-o StrictHostKeyChecking=no",
+		"-o UserKnownHostsFile=/dev/null",
+		"-i"+privateKeyFile,
+		"-p "+port,
+		user+"@localhost",
+		"lucos_test/production/SINGLE_KEY/extra-param=whoknows",
+	)
+	stdout, err := cmd.StdoutPipe()
+	assertNoError(test, err)
+	err = cmd.Start()
+	assertNoError(test, err)
+	output, err := io.ReadAll(stdout)
+	assertNoError(test, err)
+	err = cmd.Wait()
+	assertNotEqual(test, "Command didn't return an error", nil, err)
+	exitError, _ := err.(*exec.ExitError)
+	assertEqual(test, "Unexpected exit code", StatusBadSyntax, exitError.ExitCode())
+	assertEqual(test, "Wrong error message", "Syntax Error: Unexpected number of slashes\n", string(output))
+
+
+	cmd = exec.Command(
+		"/usr/bin/ssh",
+		"-o BatchMode=yes",
+		"-o StrictHostKeyChecking=no",
+		"-o UserKnownHostsFile=/dev/null",
+		"-i"+privateKeyFile,
+		"-p "+port,
+		user+"@localhost",
+		"lucos_test/production => lucos_test2/testing/extra-bit",
+	)
+	stdout, err = cmd.StdoutPipe()
+	assertNoError(test, err)
+	err = cmd.Start()
+	assertNoError(test, err)
+	output, err = io.ReadAll(stdout)
+	assertNoError(test, err)
+	err = cmd.Wait()
+	assertNotEqual(test, "Command didn't return an error", nil, err)
+	exitError, _ = err.(*exec.ExitError)
+	assertEqual(test, "Unexpected exit code", StatusBadSyntax, exitError.ExitCode())
+	assertEqual(test, "Wrong error message", "Syntax Error: Unexpected number of slashes\n", string(output))
+
+	cmd = exec.Command(
+		"/usr/bin/ssh",
+		"-o BatchMode=yes",
+		"-o StrictHostKeyChecking=no",
+		"-o UserKnownHostsFile=/dev/null",
+		"-i"+privateKeyFile,
+		"-p "+port,
+		user+"@localhost",
+		"lucos_test/production => lucos_test2/testing => lucos_test2/staging",
+	)
+	stdout, err = cmd.StdoutPipe()
+	assertNoError(test, err)
+	err = cmd.Start()
+	assertNoError(test, err)
+	output, err = io.ReadAll(stdout)
+	assertNoError(test, err)
+	err = cmd.Wait()
+	assertNotEqual(test, "Command didn't return an error", nil, err)
+	exitError, _ = err.(*exec.ExitError)
+	assertEqual(test, "Unexpected exit code", StatusBadSyntax, exitError.ExitCode())
+	assertEqual(test, "Wrong error message", "Syntax Error: Unexpected number of arrows\n", string(output))
+
+	cmd = exec.Command(
+		"/usr/bin/ssh",
+		"-o BatchMode=yes",
+		"-o StrictHostKeyChecking=no",
+		"-o UserKnownHostsFile=/dev/null",
+		"-i"+privateKeyFile,
+		"-p "+port,
+		user+"@localhost",
+		"ls lucos_test2/testing/KEYNAME/extra-param",
+	)
+	stdout, err = cmd.StdoutPipe()
+	assertNoError(test, err)
+	err = cmd.Start()
+	assertNoError(test, err)
+	output, err = io.ReadAll(stdout)
+	assertNoError(test, err)
+	err = cmd.Wait()
+	assertNotEqual(test, "Command didn't return an error", nil, err)
+	exitError, _ = err.(*exec.ExitError)
+	assertEqual(test, "Unexpected exit code", StatusBadSyntax, exitError.ExitCode())
+	assertEqual(test, "Wrong error message", "Syntax Error: Unexpected number of slashes\n", string(output))
+
+}
