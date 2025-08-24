@@ -18,6 +18,7 @@ const (
 	StatusValidationError = 4 // The call asked to do something which isn't allowed
 	StatusInternalError = 5   // The request couldn't be fufilled because of an error in the server
 )
+var validationError *ValidationError
 
 func handleSshConnection(connection net.Conn, config *ssh.ServerConfig, datastore Datastore) {
 	slog.Debug("New connection received")
@@ -143,12 +144,14 @@ func handleSshConnection(connection net.Conn, config *ssh.ServerConfig, datastor
 							} else {
 								err = datastore.deleteCredential(system, environment, key)
 							}
-							if (err != nil && err.Error() == "Invalid Key") {
-								exitStatus.code = StatusValidationError
-								channel.Write([]byte("Invalid Key\n"))
-							} else if err != nil {
-								exitStatus.code = StatusInternalError
-								slog.Warn("Failed to update simple credential", slog.Any("error", err))
+							if (err != nil) {
+								if (errors.As(err, &validationError)) {
+									exitStatus.code = StatusValidationError
+									channel.Write([]byte(err.Error()+"\n"))
+								} else {
+									exitStatus.code = StatusInternalError
+									slog.Warn("Failed to update simple credential", slog.Any("error", err))
+								}
 							}
 						}
 					}

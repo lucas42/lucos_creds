@@ -342,7 +342,7 @@ func TestLsOverSSH(test *testing.T) {
 	assertSshCommandReturnsOutput(test, "ls lucos_test/production", "{\"ENVIRONMENT\":{\"system\":\"lucos_test\",\"environment\":\"production\",\"key\":\"ENVIRONMENT\",\"type\":\"built-in\"},\"SINGLE_KEY\":{\"system\":\"lucos_test\",\"environment\":\"production\",\"key\":\"SINGLE_KEY\",\"type\":\"simple\"}}\n")
 
 }
-func TestSyntaxError(test *testing.T) {
+func TestSyntaxErrors(test *testing.T) {
 	defer startTestServer(test)()
 
 	assertSshCommandReturnsError(test, "lucos_test/production/SINGLE_KEY/extra-param=whoknows", StatusBadSyntax, "Syntax Error: Unexpected number of slashes\n")
@@ -350,5 +350,19 @@ func TestSyntaxError(test *testing.T) {
 	assertSshCommandReturnsError(test, "lucos_test/production => lucos_test2/testing => lucos_test2/staging", StatusBadSyntax, "Syntax Error: Unexpected number of arrows\n")
 	assertSshCommandReturnsError(test, "ls lucos_test2/testing/KEYNAME/extra-param", StatusBadSyntax, "Syntax Error: Unexpected number of slashes\n")
 	assertSshCommandReturnsError(test, "lucos_test2/testing/KEYNAME", StatusBadSyntax, "Syntax Error: No assignment character found\n")
+
+}
+func TestValidationErrors(test *testing.T) {
+	defer startTestServer(test)()
+
+	// Update Simple Credentials
+	assertSshCommandReturnsError(test, "lucos_test/production/ENVIRONMENT=staging", StatusValidationError, "Validation Error: ENVIRONMENT is a reserved key\n")
+	assertSshCommandReturnsError(test, "lucos_test/production/CLIENT_KEYS=123abc", StatusValidationError, "Validation Error: CLIENT_KEYS is a reserved key\n")
+	assertSshCommandReturnsError(test, "lucos_test/production/KEY_LUCOS_TEST_CLIENT=789xyz", StatusValidationError, "Validation Error: keys beginning KEY_ are reserved\n")
+
+	// Delete Simple Credentials
+	assertSshCommandReturnsError(test, "lucos_test/production/ENVIRONMENT=", StatusValidationError, "Validation Error: ENVIRONMENT is a reserved key\n")
+	assertSshCommandReturnsError(test, "lucos_test/production/CLIENT_KEYS=", StatusValidationError, "Validation Error: CLIENT_KEYS is a reserved key\n")
+	assertSshCommandReturnsError(test, "lucos_test/production/KEY_LUCOS_TEST_CLIENT=", StatusValidationError, "Validation Error: keys beginning KEY_ are reserved\n")
 
 }

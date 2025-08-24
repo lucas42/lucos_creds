@@ -3,7 +3,6 @@ package main
 import (
 	"crypto/cipher"
 	"crypto/rand"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -110,6 +109,11 @@ type SystemEnvironment struct {
 	System      string `json:"system"`
 	Environment string `json:"environment"`
 }
+
+type ValidationError struct {
+    msg string
+}
+func (e *ValidationError) Error() string { return "Validation Error: "+e.msg }
 
 func (credential *SimpleCredential) encrypt(dataBlockCipher cipher.AEAD) (err error) {
 	nonce := make([]byte, dataBlockCipher.NonceSize())
@@ -267,8 +271,12 @@ func (datastore Datastore) updateCredential(system string, environment string, k
 	credential.System = system
 	credential.Environment = environment
 	credential.Key = strings.ToUpper(key) // Normalise all keys to only be uppercase
-	if (credential.Key == "CLIENT_KEYS" || strings.HasPrefix(credential.Key, "KEY_") || credential.Key == "ENVIRONMENT") {
-		err = errors.New("Invalid Key")
+	if (credential.Key == "CLIENT_KEYS" || credential.Key == "ENVIRONMENT") {
+		err = &ValidationError{credential.Key+" is a reserved key"}
+		return
+	}
+	if (strings.HasPrefix(credential.Key, "KEY_")) {
+		err = &ValidationError{"keys beginning KEY_ are reserved"}
 		return
 	}
 	credential.PlainValue = rawValue
@@ -312,8 +320,12 @@ func (datastore Datastore) deleteCredential(system string, environment string, k
 	credential.System = system
 	credential.Environment = environment
 	credential.Key = strings.ToUpper(key) // Normalise all keys to only be uppercase
-	if (credential.Key == "CLIENT_KEYS" || strings.HasPrefix(credential.Key, "KEY_") || credential.Key == "ENVIRONMENT") {
-		err = errors.New("Invalid Key")
+	if (credential.Key == "CLIENT_KEYS" || credential.Key == "ENVIRONMENT") {
+		err = &ValidationError{credential.Key+" is a reserved key"}
+		return
+	}
+	if (strings.HasPrefix(credential.Key, "KEY_")) {
+		err = &ValidationError{"keys beginning KEY_ are reserved"}
 		return
 	}
 
