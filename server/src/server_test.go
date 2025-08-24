@@ -46,6 +46,14 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+const (
+	TEST_PORT = "2222"
+	TEST_USER = "bob"
+	TEST_DBPATH = "test_db.sqlite"
+	TEST_SERVERKEYPATH = "test_data.key"
+	TEST_CLIENTKEYPATH = "test.id_eddsa"
+)
+
 /**
  * Convenience method for generating a keypair and getting a signer for it
  */
@@ -57,33 +65,42 @@ func getKeyAndSigner(test *testing.T) (signer ssh.Signer, privateKeyBytes []byte
 	return
 }
 
-func TestWriteReadEnvFile(test *testing.T) {
-	port := "2222"
-	user := "bob"
-	datastorePath := "test_db.sqlite"
-	dataKeyPath := "test_data.key"
-	defer os.Remove(datastorePath)
-	defer os.Remove(dataKeyPath)
+/**
+ * Convenience method to start a server with default test parameters
+ * Authorises a single user whose private key is stored in TEST_CLIENTPATH
+ * Returns a function of cleanup tasks which should be deferred until the end of the test
+ */
+func startTestServer(test *testing.T) (func()) {
 	serverSigner, _ := getKeyAndSigner(test)
 	clientSigner, clientPrivateKey := getKeyAndSigner(test)
-	_, closeServer := startSftpServer(port, serverSigner, initDatastore(datastorePath, dataKeyPath, MockLoganne{}), map[string]ssh.PublicKey{user: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
-	defer closeServer()
+	_, closeServer := startSftpServer(TEST_PORT, serverSigner, initDatastore(TEST_DBPATH, TEST_SERVERKEYPATH, MockLoganne{}), map[string]ssh.PublicKey{TEST_USER: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
 
-	privateKeyFile := "test.id_eddsa"
-	err := os.WriteFile("test.id_eddsa", clientPrivateKey, 0700)
+	err := os.WriteFile(TEST_CLIENTKEYPATH, clientPrivateKey, 0700)
 	assertNoError(test, err)
+
+	// Cleanup to defer to end of test
+	return func() {
+		closeServer()
+		os.Remove(TEST_DBPATH)
+		os.Remove(TEST_SERVERKEYPATH)
+		os.Remove(TEST_CLIENTKEYPATH)
+	}
+}
+
+func TestWriteReadEnvFile(test *testing.T) {
+	defer startTestServer(test)()
 
 	cmd := exec.Command(
 		"/usr/bin/ssh",
 		"-o BatchMode=yes",
 		"-o StrictHostKeyChecking=no",
 		"-o UserKnownHostsFile=/dev/null",
-		"-i"+privateKeyFile,
-		"-p "+port,
-		user+"@localhost",
+		"-i"+TEST_CLIENTKEYPATH,
+		"-p "+TEST_PORT,
+		TEST_USER+"@localhost",
 		"lucos_test/production/BORING_KEY=yellow",
 	)
-	err = cmd.Run()
+	err := cmd.Run()
 	assertNoError(test, err)
 
 	cmd = exec.Command(
@@ -91,9 +108,9 @@ func TestWriteReadEnvFile(test *testing.T) {
 		"-o BatchMode=yes",
 		"-o StrictHostKeyChecking=no",
 		"-o UserKnownHostsFile=/dev/null",
-		"-i"+privateKeyFile,
-		"-p "+port,
-		user+"@localhost",
+		"-i"+TEST_CLIENTKEYPATH,
+		"-p "+TEST_PORT,
+		TEST_USER+"@localhost",
 		"lucos_test/production/OTHERKEY=green",
 	)
 	err = cmd.Run()
@@ -106,9 +123,9 @@ func TestWriteReadEnvFile(test *testing.T) {
 		"-o BatchMode=yes",
 		"-o StrictHostKeyChecking=no",
 		"-o UserKnownHostsFile=/dev/null",
-		"-i"+privateKeyFile,
-		"-P "+port,
-		user+"@localhost:lucos_test/production/.env",
+		"-i"+TEST_CLIENTKEYPATH,
+		"-P "+TEST_PORT,
+		TEST_USER+"@localhost:lucos_test/production/.env",
 		testFileName, // would prefer to send straight to /dev/stdout, then read cmd.Output(), but that causes weird errors on my laptop
 	);
 	err = cmd.Run()
@@ -117,128 +134,80 @@ func TestWriteReadEnvFile(test *testing.T) {
 	assertNoError(test, err)
 	err = os.Remove(testFileName)
 	assertNoError(test, err)
-	err = os.Remove(privateKeyFile)
-	assertNoError(test, err)
 
 	assertEqual(test, "Unexpected .env contents", "BORING_KEY=\"yellow\"\nENVIRONMENT=\"production\"\nOTHERKEY=\"green\"\n", string(contents))
 }
 // Requests a file which isn't available on the server
 func TestReadMissingFile(test *testing.T) {
-	port := "2222"
-	user := "bob"
-	datastorePath := "test_db.sqlite"
-	dataKeyPath := "test_data.key"
-	defer os.Remove(datastorePath)
-	defer os.Remove(dataKeyPath)
-	serverSigner, _ := getKeyAndSigner(test)
-	clientSigner, clientPrivateKey := getKeyAndSigner(test)
-	_, closeServer := startSftpServer(port, serverSigner, initDatastore(datastorePath, dataKeyPath, MockLoganne{}), map[string]ssh.PublicKey{user: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
-	defer closeServer()
-
-	privateKeyFile := "test.id_eddsa"
-	err := os.WriteFile("test.id_eddsa", clientPrivateKey, 0700)
-	assertNoError(test, err)
+	defer startTestServer(test)()
 	cmd := exec.Command(
 		"/usr/bin/scp",
 		"-s", // Needed for OpenSSH 8.9 which doesn't default to SFTP (can remove for OpenSSH9.0 and above)
 		"-o BatchMode=yes",
 		"-o StrictHostKeyChecking=no",
 		"-o UserKnownHostsFile=/dev/null",
-		"-i"+privateKeyFile,
-		"-P "+port,
-		user+"@localhost:unknown_file.txt",
+		"-i"+TEST_CLIENTKEYPATH,
+		"-P "+TEST_PORT,
+		TEST_USER+"@localhost:unknown_file.txt",
 		"/dev/null", // would prefer to send straight to /dev/stdout, then read cmd.Output(), but that causes weird errors on my laptop
 	);
-	err = cmd.Run()
+	err := cmd.Run()
 	if err == nil {
 		test.Errorf("No error returned requesting missing file %s", err)
 	}
-	err = os.Remove(privateKeyFile)
-	assertNoError(test, err)
+	defer os.Remove(TEST_CLIENTKEYPATH)
 }
 // Tries to log in as a user who isn't on the authorised list
 func TestInvalidUser(test *testing.T) {
-	port := "2222"
-	user := "bob"
-	datastorePath := "test_db.sqlite"
-	dataKeyPath := "test_data.key"
-	defer os.Remove(datastorePath)
-	defer os.Remove(dataKeyPath)
-	serverSigner, _ := getKeyAndSigner(test)
-	clientSigner, clientPrivateKey := getKeyAndSigner(test)
-	_, closeServer := startSftpServer(port, serverSigner, initDatastore(datastorePath, dataKeyPath, MockLoganne{}), map[string]ssh.PublicKey{user: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
-	defer closeServer()
-
-	privateKeyFile := "test.id_eddsa"
-	err := os.WriteFile("test.id_eddsa", clientPrivateKey, 0700)
-	assertNoError(test, err)
+	defer startTestServer(test)()
 	cmd := exec.Command(
 		"/usr/bin/scp",
 		"-s", // Needed for OpenSSH 8.9 which doesn't default to SFTP (can remove for OpenSSH9.0 and above)
 		"-o BatchMode=yes",
 		"-o StrictHostKeyChecking=no",
 		"-o UserKnownHostsFile=/dev/null",
-		"-i"+privateKeyFile,
-		"-P "+port,
+		"-i"+TEST_CLIENTKEYPATH,
+		"-P "+TEST_PORT,
 		"bobby@localhost:.env",
 		"/dev/null", // would prefer to send straight to /dev/stdout, then read cmd.Output(), but that causes weird errors on my laptop
 	);
-	err = cmd.Run()
+	err := cmd.Run()
 	if err == nil {
 		test.Errorf("No error returned for invalid user %s", err)
 	}
-	err = os.Remove(privateKeyFile)
+	defer os.Remove(TEST_CLIENTKEYPATH)
 }
 // Tries to log in with a private key not linked to any authorised public key
 func TestWrongKey(test *testing.T) {
-	port := "2222"
-	user := "bob"
-	datastorePath := "test_db.sqlite"
-	dataKeyPath := "test_data.key"
-	defer os.Remove(datastorePath)
-	defer os.Remove(dataKeyPath)
-	serverSigner, _ := getKeyAndSigner(test)
-	clientSigner, _ := getKeyAndSigner(test)
-	_, incorrectClientPrivateKey := getKeyAndSigner(test)
-	_, closeServer := startSftpServer(port, serverSigner, initDatastore(datastorePath, dataKeyPath, MockLoganne{}), map[string]ssh.PublicKey{user: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
-	defer closeServer()
-
-	privateKeyFile := "test.id_eddsa"
-	err := os.WriteFile("test.id_eddsa", incorrectClientPrivateKey, 0700)
-	assertNoError(test, err)
+	defer startTestServer(test)()
 	cmd := exec.Command(
 		"/usr/bin/scp",
 		"-s", // Needed for OpenSSH 8.9 which doesn't default to SFTP (can remove for OpenSSH9.0 and above)
 		"-o BatchMode=yes",
 		"-o StrictHostKeyChecking=no",
 		"-o UserKnownHostsFile=/dev/null",
-		"-i"+privateKeyFile,
-		"-P "+port,
-		user+"@localhost:.env",
+		"-i"+TEST_CLIENTKEYPATH,
+		"-P "+TEST_PORT,
+		TEST_USER+"@localhost:.env",
 		"/dev/null", // would prefer to send straight to /dev/stdout, then read cmd.Output(), but that causes weird errors on my laptop
 	);
-	err = cmd.Run()
+	err := cmd.Run()
 	if err == nil {
 		test.Errorf("No error returned for wrong key %s", err)
 	}
-	err = os.Remove(privateKeyFile)
-	assertNoError(test, err)
+	defer os.Remove(TEST_CLIENTKEYPATH)
 }
 // Tries to log in as Bob, using Alice's private key
 func TestDifferentUsersKey(test *testing.T) {
-	port := "2222"
-	datastorePath := "test_db.sqlite"
-	dataKeyPath := "test_data.key"
-	defer os.Remove(datastorePath)
-	defer os.Remove(dataKeyPath)
+	defer os.Remove(TEST_DBPATH)
+	defer os.Remove(TEST_SERVERKEYPATH)
 	serverSigner, _ := getKeyAndSigner(test)
 	aliceSigner, alicePrivateKey := getKeyAndSigner(test)
 	bobSigner, _ := getKeyAndSigner(test)
-	_, closeServer := startSftpServer(port, serverSigner, initDatastore(datastorePath, dataKeyPath, MockLoganne{}), map[string]ssh.PublicKey{"alice": aliceSigner.PublicKey(), "bob": bobSigner.PublicKey()}, map[string]ssh.Permissions{})
+	_, closeServer := startSftpServer(TEST_PORT, serverSigner, initDatastore(TEST_DBPATH, TEST_SERVERKEYPATH, MockLoganne{}), map[string]ssh.PublicKey{"alice": aliceSigner.PublicKey(), "bob": bobSigner.PublicKey()}, map[string]ssh.Permissions{})
 	defer closeServer()
 
-	privateKeyFile := "test.id_eddsa"
-	err := os.WriteFile("test.id_eddsa", alicePrivateKey, 0700)
+	err := os.WriteFile(TEST_CLIENTKEYPATH, alicePrivateKey, 0700)
 	assertNoError(test, err)
 	cmd := exec.Command(
 		"/usr/bin/scp",
@@ -246,8 +215,8 @@ func TestDifferentUsersKey(test *testing.T) {
 		"-o BatchMode=yes",
 		"-o StrictHostKeyChecking=no",
 		"-o UserKnownHostsFile=/dev/null",
-		"-i"+privateKeyFile,
-		"-P "+port,
+		"-i"+TEST_CLIENTKEYPATH,
+		"-P "+TEST_PORT,
 		"bob@localhost:.env",
 		"/dev/null", // would prefer to send straight to /dev/stdout, then read cmd.Output(), but that causes weird errors on my laptop
 	);
@@ -255,23 +224,17 @@ func TestDifferentUsersKey(test *testing.T) {
 	if err == nil {
 		test.Errorf("No error returned for switched key %s", err)
 	}
-	err = os.Remove(privateKeyFile)
-	assertNoError(test, err)
+	defer os.Remove(TEST_CLIENTKEYPATH)
 }
 
 func TestStatePersistsRestart(test *testing.T) {
-	port := "2222"
-	user := "bob"
-	datastorePath := "test_db.sqlite"
-	dataKeyPath := "test_data.key"
 	serverSigner, _ := getKeyAndSigner(test)
-	defer os.Remove(datastorePath)
-	defer os.Remove(dataKeyPath)
+	defer os.Remove(TEST_DBPATH)
+	defer os.Remove(TEST_SERVERKEYPATH)
 	clientSigner, clientPrivateKey := getKeyAndSigner(test)
-	_, closeFirstServer := startSftpServer(port, serverSigner, initDatastore(datastorePath, dataKeyPath, MockLoganne{}), map[string]ssh.PublicKey{user: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
+	_, closeFirstServer := startSftpServer(TEST_PORT, serverSigner, initDatastore(TEST_DBPATH, TEST_SERVERKEYPATH, MockLoganne{}), map[string]ssh.PublicKey{TEST_USER: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
 
-	privateKeyFile := "test.id_eddsa"
-	err := os.WriteFile("test.id_eddsa", clientPrivateKey, 0700)
+	err := os.WriteFile(TEST_CLIENTKEYPATH, clientPrivateKey, 0700)
 	assertNoError(test, err)
 
 	cmd := exec.Command(
@@ -279,16 +242,16 @@ func TestStatePersistsRestart(test *testing.T) {
 		"-o BatchMode=yes",
 		"-o StrictHostKeyChecking=no",
 		"-o UserKnownHostsFile=/dev/null",
-		"-i"+privateKeyFile,
-		"-p "+port,
-		user+"@localhost",
+		"-i"+TEST_CLIENTKEYPATH,
+		"-p "+TEST_PORT,
+		TEST_USER+"@localhost",
 		"lucos_test/production/BORING_KEY=yellow",
 	)
 	err = cmd.Run()
 	assertNoError(test, err)
 
 	closeFirstServer()
-	_, closeSecondServer := startSftpServer(port, serverSigner, initDatastore(datastorePath, dataKeyPath, MockLoganne{}), map[string]ssh.PublicKey{user: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
+	_, closeSecondServer := startSftpServer(TEST_PORT, serverSigner, initDatastore(TEST_DBPATH, TEST_SERVERKEYPATH, MockLoganne{}), map[string]ssh.PublicKey{TEST_USER: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
 	defer closeSecondServer()
 
 	cmd = exec.Command(
@@ -296,9 +259,9 @@ func TestStatePersistsRestart(test *testing.T) {
 		"-o BatchMode=yes",
 		"-o StrictHostKeyChecking=no",
 		"-o UserKnownHostsFile=/dev/null",
-		"-i"+privateKeyFile,
-		"-p "+port,
-		user+"@localhost",
+		"-i"+TEST_CLIENTKEYPATH,
+		"-p "+TEST_PORT,
+		TEST_USER+"@localhost",
 		"lucos_test/production/OTHERKEY=green",
 	)
 	err = cmd.Run()
@@ -311,9 +274,9 @@ func TestStatePersistsRestart(test *testing.T) {
 		"-o BatchMode=yes",
 		"-o StrictHostKeyChecking=no",
 		"-o UserKnownHostsFile=/dev/null",
-		"-i"+privateKeyFile,
-		"-P "+port,
-		user+"@localhost:lucos_test/production/.env",
+		"-i"+TEST_CLIENTKEYPATH,
+		"-P "+TEST_PORT,
+		TEST_USER+"@localhost:lucos_test/production/.env",
 		testFileName, // would prefer to send straight to /dev/stdout, then read cmd.Output(), but that causes weird errors on my laptop
 	);
 	err = cmd.Run()
@@ -322,38 +285,24 @@ func TestStatePersistsRestart(test *testing.T) {
 	assertNoError(test, err)
 	err = os.Remove(testFileName)
 	assertNoError(test, err)
-	err = os.Remove(privateKeyFile)
-	assertNoError(test, err)
+	defer os.Remove(TEST_CLIENTKEYPATH)
 
 	assertEqual(test, "Unexpected .env contents", "BORING_KEY=\"yellow\"\nENVIRONMENT=\"production\"\nOTHERKEY=\"green\"\n", string(contents))
 }
 func TestCreateLinkedCredentialOverSSH(test *testing.T) {
-	port := "2222"
-	user := "bob"
-	datastorePath := "test_db.sqlite"
-	dataKeyPath := "test_data.key"
-	defer os.Remove(datastorePath)
-	defer os.Remove(dataKeyPath)
-	serverSigner, _ := getKeyAndSigner(test)
-	clientSigner, clientPrivateKey := getKeyAndSigner(test)
-	_, closeServer := startSftpServer(port, serverSigner, initDatastore(datastorePath, dataKeyPath, MockLoganne{}), map[string]ssh.PublicKey{user: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
-	defer closeServer()
-
-	privateKeyFile := "test.id_eddsa"
-	err := os.WriteFile("test.id_eddsa", clientPrivateKey, 0700)
-	assertNoError(test, err)
+	defer startTestServer(test)()
 
 	cmd := exec.Command(
 		"/usr/bin/ssh",
 		"-o BatchMode=yes",
 		"-o StrictHostKeyChecking=no",
 		"-o UserKnownHostsFile=/dev/null",
-		"-i"+privateKeyFile,
-		"-p "+port,
-		user+"@localhost",
+		"-i"+TEST_CLIENTKEYPATH,
+		"-p "+TEST_PORT,
+		TEST_USER+"@localhost",
 		"lucos_test_client/production => lucos_test_server/production",
 	)
-	err = cmd.Run()
+	err := cmd.Run()
 	assertNoError(test, err)
 
 	cmd = exec.Command(
@@ -361,9 +310,9 @@ func TestCreateLinkedCredentialOverSSH(test *testing.T) {
 		"-o BatchMode=yes",
 		"-o StrictHostKeyChecking=no",
 		"-o UserKnownHostsFile=/dev/null",
-		"-i"+privateKeyFile,
-		"-p "+port,
-		user+"@localhost",
+		"-i"+TEST_CLIENTKEYPATH,
+		"-p "+TEST_PORT,
+		TEST_USER+"@localhost",
 		"lucos_test_server/production/OTHERKEY=green",
 	)
 	err = cmd.Run()
@@ -377,9 +326,9 @@ func TestCreateLinkedCredentialOverSSH(test *testing.T) {
 		"-o BatchMode=yes",
 		"-o StrictHostKeyChecking=no",
 		"-o UserKnownHostsFile=/dev/null",
-		"-i"+privateKeyFile,
-		"-P "+port,
-		user+"@localhost:lucos_test_client/production/.env",
+		"-i"+TEST_CLIENTKEYPATH,
+		"-P "+TEST_PORT,
+		TEST_USER+"@localhost:lucos_test_client/production/.env",
 		testFileName, // would prefer to send straight to /dev/stdout, then read cmd.Output(), but that causes weird errors on my laptop
 	);
 	err = cmd.Run()
@@ -399,47 +348,32 @@ func TestCreateLinkedCredentialOverSSH(test *testing.T) {
 		"-o BatchMode=yes",
 		"-o StrictHostKeyChecking=no",
 		"-o UserKnownHostsFile=/dev/null",
-		"-i"+privateKeyFile,
-		"-P "+port,
-		user+"@localhost:lucos_test_server/production/.env",
+		"-i"+TEST_CLIENTKEYPATH,
+		"-P "+TEST_PORT,
+		TEST_USER+"@localhost:lucos_test_server/production/.env",
 		testFileName, // would prefer to send straight to /dev/stdout, then read cmd.Output(), but that causes weird errors on my laptop
 	);
 	err = cmd.Run()
 	assertNoError(test, err)
 	contents, err = os.ReadFile(testFileName)
 	assertNoError(test, err)
-	err = os.Remove(privateKeyFile)
-	assertNoError(test, err)
 
 	assertEqual(test, "Unexpected .env contents", "CLIENT_KEYS=\"lucos_test_client:production="+sharedCredential+"\"\nENVIRONMENT=\"production\"\nOTHERKEY=\"green\"\n", string(contents))
 }
 func TestDeleteCredentialOverSSH(test *testing.T) {
-	port := "2222"
-	user := "bob"
-	datastorePath := "test_db.sqlite"
-	dataKeyPath := "test_data.key"
-	defer os.Remove(datastorePath)
-	defer os.Remove(dataKeyPath)
-	serverSigner, _ := getKeyAndSigner(test)
-	clientSigner, clientPrivateKey := getKeyAndSigner(test)
-	_, closeServer := startSftpServer(port, serverSigner, initDatastore(datastorePath, dataKeyPath, MockLoganne{}), map[string]ssh.PublicKey{user: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
-	defer closeServer()
-
-	privateKeyFile := "test.id_eddsa"
-	err := os.WriteFile("test.id_eddsa", clientPrivateKey, 0700)
-	assertNoError(test, err)
+	defer startTestServer(test)()
 
 	cmd := exec.Command(
 		"/usr/bin/ssh",
 		"-o BatchMode=yes",
 		"-o StrictHostKeyChecking=no",
 		"-o UserKnownHostsFile=/dev/null",
-		"-i"+privateKeyFile,
-		"-p "+port,
-		user+"@localhost",
+		"-i"+TEST_CLIENTKEYPATH,
+		"-p "+TEST_PORT,
+		TEST_USER+"@localhost",
 		"lucos_test_server/staging/SPECIAL=green",
 	)
-	err = cmd.Run()
+	err := cmd.Run()
 	assertNoError(test, err)
 
 	cmd = exec.Command(
@@ -447,9 +381,9 @@ func TestDeleteCredentialOverSSH(test *testing.T) {
 		"-o BatchMode=yes",
 		"-o StrictHostKeyChecking=no",
 		"-o UserKnownHostsFile=/dev/null",
-		"-i"+privateKeyFile,
-		"-p "+port,
-		user+"@localhost",
+		"-i"+TEST_CLIENTKEYPATH,
+		"-p "+TEST_PORT,
+		TEST_USER+"@localhost",
 		"lucos_test_server/staging/SPECIAL=",
 	)
 	err = cmd.Run()
@@ -463,36 +397,21 @@ func TestDeleteCredentialOverSSH(test *testing.T) {
 		"-o BatchMode=yes",
 		"-o StrictHostKeyChecking=no",
 		"-o UserKnownHostsFile=/dev/null",
-		"-i"+privateKeyFile,
-		"-P "+port,
-		user+"@localhost:lucos_test_server/staging/.env",
+		"-i"+TEST_CLIENTKEYPATH,
+		"-P "+TEST_PORT,
+		TEST_USER+"@localhost:lucos_test_server/staging/.env",
 		testFileName, // would prefer to send straight to /dev/stdout, then read cmd.Output(), but that causes weird errors on my laptop
 	);
 	err = cmd.Run()
 	assertNoError(test, err)
 	contents, err := os.ReadFile(testFileName)
 	assertNoError(test, err)
-	err = os.Remove(privateKeyFile)
-	assertNoError(test, err)
+	defer os.Remove(TEST_CLIENTKEYPATH)
 
 	assertEqual(test, "Unexpected .env contents", "ENVIRONMENT=\"staging\"\n", string(contents))
 }
 func TestLsOverSSH(test *testing.T) {
-	port := "2222"
-	user := "bob"
-	datastorePath := "test_db.sqlite"
-	dataKeyPath := "test_data.key"
-	defer os.Remove(datastorePath)
-	defer os.Remove(dataKeyPath)
-	serverSigner, _ := getKeyAndSigner(test)
-	clientSigner, clientPrivateKey := getKeyAndSigner(test)
-	_, closeServer := startSftpServer(port, serverSigner, initDatastore(datastorePath, dataKeyPath, MockLoganne{}), map[string]ssh.PublicKey{user: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
-	defer closeServer()
-
-	privateKeyFile := "test.id_eddsa"
-	err := os.WriteFile("test.id_eddsa", clientPrivateKey, 0700)
-	assertNoError(test, err)
-	defer os.Remove(privateKeyFile)
+	defer startTestServer(test)()
 
 
 	cmd := exec.Command(
@@ -500,12 +419,12 @@ func TestLsOverSSH(test *testing.T) {
 		"-o BatchMode=yes",
 		"-o StrictHostKeyChecking=no",
 		"-o UserKnownHostsFile=/dev/null",
-		"-i"+privateKeyFile,
-		"-p "+port,
-		user+"@localhost",
+		"-i"+TEST_CLIENTKEYPATH,
+		"-p "+TEST_PORT,
+		TEST_USER+"@localhost",
 		"lucos_test/production/SINGLE_KEY=lilac",
 	)
-	err = cmd.Run()
+	err := cmd.Run()
 	assertNoError(test, err)
 
 	cmd = exec.Command(
@@ -513,9 +432,9 @@ func TestLsOverSSH(test *testing.T) {
 		"-o BatchMode=yes",
 		"-o StrictHostKeyChecking=no",
 		"-o UserKnownHostsFile=/dev/null",
-		"-i"+privateKeyFile,
-		"-p "+port,
-		user+"@localhost",
+		"-i"+TEST_CLIENTKEYPATH,
+		"-p "+TEST_PORT,
+		TEST_USER+"@localhost",
 		"ls",
 	)
 	stdout, err := cmd.StdoutPipe()
@@ -533,9 +452,9 @@ func TestLsOverSSH(test *testing.T) {
 		"-o BatchMode=yes",
 		"-o StrictHostKeyChecking=no",
 		"-o UserKnownHostsFile=/dev/null",
-		"-i"+privateKeyFile,
-		"-p "+port,
-		user+"@localhost",
+		"-i"+TEST_CLIENTKEYPATH,
+		"-p "+TEST_PORT,
+		TEST_USER+"@localhost",
 		"ls lucos_test/production",
 	)
 	stdout, err = cmd.StdoutPipe()
@@ -549,21 +468,7 @@ func TestLsOverSSH(test *testing.T) {
 	assertEqual(test, "ls lucos_test/production", "{\"ENVIRONMENT\":{\"system\":\"lucos_test\",\"environment\":\"production\",\"key\":\"ENVIRONMENT\",\"type\":\"built-in\"},\"SINGLE_KEY\":{\"system\":\"lucos_test\",\"environment\":\"production\",\"key\":\"SINGLE_KEY\",\"type\":\"simple\"}}\n", string(output))
 }
 func TestSyntaxError(test *testing.T) {
-	port := "2222"
-	user := "bob"
-	datastorePath := "test_db.sqlite"
-	dataKeyPath := "test_data.key"
-	defer os.Remove(datastorePath)
-	defer os.Remove(dataKeyPath)
-	serverSigner, _ := getKeyAndSigner(test)
-	clientSigner, clientPrivateKey := getKeyAndSigner(test)
-	_, closeServer := startSftpServer(port, serverSigner, initDatastore(datastorePath, dataKeyPath, MockLoganne{}), map[string]ssh.PublicKey{user: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
-	defer closeServer()
-
-	privateKeyFile := "test.id_eddsa"
-	err := os.WriteFile("test.id_eddsa", clientPrivateKey, 0700)
-	assertNoError(test, err)
-	defer os.Remove(privateKeyFile)
+	defer startTestServer(test)()
 
 
 	cmd := exec.Command(
@@ -571,9 +476,9 @@ func TestSyntaxError(test *testing.T) {
 		"-o BatchMode=yes",
 		"-o StrictHostKeyChecking=no",
 		"-o UserKnownHostsFile=/dev/null",
-		"-i"+privateKeyFile,
-		"-p "+port,
-		user+"@localhost",
+		"-i"+TEST_CLIENTKEYPATH,
+		"-p "+TEST_PORT,
+		TEST_USER+"@localhost",
 		"lucos_test/production/SINGLE_KEY/extra-param=whoknows",
 	)
 	stdout, err := cmd.StdoutPipe()
@@ -594,9 +499,9 @@ func TestSyntaxError(test *testing.T) {
 		"-o BatchMode=yes",
 		"-o StrictHostKeyChecking=no",
 		"-o UserKnownHostsFile=/dev/null",
-		"-i"+privateKeyFile,
-		"-p "+port,
-		user+"@localhost",
+		"-i"+TEST_CLIENTKEYPATH,
+		"-p "+TEST_PORT,
+		TEST_USER+"@localhost",
 		"lucos_test/production => lucos_test2/testing/extra-bit",
 	)
 	stdout, err = cmd.StdoutPipe()
@@ -616,9 +521,9 @@ func TestSyntaxError(test *testing.T) {
 		"-o BatchMode=yes",
 		"-o StrictHostKeyChecking=no",
 		"-o UserKnownHostsFile=/dev/null",
-		"-i"+privateKeyFile,
-		"-p "+port,
-		user+"@localhost",
+		"-i"+TEST_CLIENTKEYPATH,
+		"-p "+TEST_PORT,
+		TEST_USER+"@localhost",
 		"lucos_test/production => lucos_test2/testing => lucos_test2/staging",
 	)
 	stdout, err = cmd.StdoutPipe()
@@ -638,9 +543,9 @@ func TestSyntaxError(test *testing.T) {
 		"-o BatchMode=yes",
 		"-o StrictHostKeyChecking=no",
 		"-o UserKnownHostsFile=/dev/null",
-		"-i"+privateKeyFile,
-		"-p "+port,
-		user+"@localhost",
+		"-i"+TEST_CLIENTKEYPATH,
+		"-p "+TEST_PORT,
+		TEST_USER+"@localhost",
 		"ls lucos_test2/testing/KEYNAME/extra-param",
 	)
 	stdout, err = cmd.StdoutPipe()
