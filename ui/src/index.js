@@ -61,6 +61,11 @@ app.get('/system/:system/:environment', catchErrors(async (req, res) => {
 	});
 }));
 
+app.get('/system/:system/:environment/:key', catchErrors(async (req, res) => {
+	const credential = await getCredential(req.params.system, req.params.environment, req.params.key);
+	res.render('view-credential', credential);
+}));
+
 app.get('/update-simple-credential', catchErrors(async (req, res) => {
 	let value;
 	let type = "unset";

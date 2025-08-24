@@ -27,13 +27,17 @@ h1 {
 .inline-button {
 	color: #eee;
 	border-radius: 5px;
+	vertical-align: middle;
 }
 .add-button {
 	background: #260;
 	float: right;
 }
-.edit-button {
+.view-button {
 	background: #06f;
+}
+.edit-button {
+	background: #c80;
 }
 .delete-button {
 	background: #b00;
@@ -57,11 +61,34 @@ h1 {
 	font-family: "Courier New", monospace;
 	text-transform: uppercase;
 }
+.view-field {
+	margin: 10px 0;
+	font-size: 20px;
+}
+.view-label {
+	display: inline-block;
+	width: 60px;
+}
 .key {
 	border: solid 1px #555;
 	font-family: "Courier New", monospace;
-	padding: 0px 3px;
+	padding: 0 0.3em;
 	background: #ffffdd77;
+}
+.value {
+	background: #ffddff77;
+	border: solid 1px #555;
+	min-width: 100px;
+	display: inline-block;
+	text-align: center;
+	font-style: italic;
+	word-break: break-all;
+	padding: 0 0.3em;
+}
+.note {
+	font-style: italic;
+	color: #222;
+	font-size: 13px;
 }
 .system-name {
 	text-transform: capitalize
@@ -83,8 +110,12 @@ h1 {
 }
 #credential-list li .inline-button {
 	font-size: 12px;
-	vertical-align: middle;
 	height: 23px;
+}
+.view-credential .inline-button {
+	font-size: 13px;
+	height: 26px;
+	margin-right: 10px;
 }
 .environment-list {
 	font-size: 18px;
@@ -111,4 +142,13 @@ h1 {
 }
 .error:before {
 	content: "⚠️ ";
+}
+a.floating-nav {
+	color: inherit;
+	text-decoration: none;
+	font-weight: bold;
+	text-shadow: 0 0 5px white;
+}
+a.floating-nav:hover {
+	text-decoration: underline;
 }

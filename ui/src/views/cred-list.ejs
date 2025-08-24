@@ -15,9 +15,14 @@
 				<input type="submit" title="Add Credential" value="＋" class="inline-button add-button" />
 			</form>
 			<ul id="credential-list">
-				<% for(const key in creds) { %>
+				<% for(const key in creds) {
+					const viewpath = `/system/${encodeURI(system)}/${encodeURI(environment)}/${encodeURI(key)}`;
+				%>
 				<li>
 					<span class="key"><%= key %></span>
+					<form action="<%= viewpath %>" method="get" class="inline-form">
+						<input type="submit" title="View Credential" value="⏿" class="inline-button view-button" />
+					</form>
 					<% if (creds[key].type == "simple") { %>
 						<form action="/update-simple-credential" method="get" class="inline-form">
 							<input type="hidden" name="system" value="<%= system %>" />
