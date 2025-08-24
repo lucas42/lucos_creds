@@ -84,6 +84,7 @@ h1 {
 	font-style: italic;
 	word-break: break-all;
 	padding: 0 0.3em;
+	white-space: pre-wrap;
 }
 .note {
 	font-style: italic;
