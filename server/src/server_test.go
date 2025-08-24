@@ -64,7 +64,7 @@ func assertSshCommandReturnsOutput(test *testing.T, command string, expected_out
 		"-i"+TEST_CLIENTKEYPATH,
 		"-p "+TEST_PORT,
 		TEST_USER+"@localhost",
-		"ls",
+		command,
 	)
 	stdout, err := cmd.StdoutPipe()
 	assertNoError(test, err)
@@ -74,7 +74,7 @@ func assertSshCommandReturnsOutput(test *testing.T, command string, expected_out
 	assertNoError(test, err)
 	err = cmd.Wait()
 	assertNoError(test, err)
-	assertEqual(test, "Unexpected output from command `"+command+"`", "[{\"system\":\"lucos_test\",\"environment\":\"production\"}]\n", string(output))
+	assertEqual(test, "Unexpected output from command `"+command+"`", expected_output, string(output))
 }
 func assertSshCommandReturnsError(test *testing.T, command string, expected_exitcode int, expected_output string) {
 	cmd := exec.Command(
