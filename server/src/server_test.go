@@ -39,6 +39,86 @@ func assertMapNotContains(test *testing.T, message string, expected string, actu
 		test.Errorf("%s. Expected key: %s found in map: %s", message, expected, actual)
 	}
 }
+func assertSshCommandDoesntError(test *testing.T, command string) {
+	cmd := exec.Command(
+		"/usr/bin/ssh",
+		"-o BatchMode=yes",
+		"-o StrictHostKeyChecking=no",
+		"-o UserKnownHostsFile=/dev/null",
+		"-i"+TEST_CLIENTKEYPATH,
+		"-p "+TEST_PORT,
+		TEST_USER+"@localhost",
+		command,
+	)
+	err := cmd.Run()
+	assertNoError(test, err)
+}
+func assertSshCommandReturnsOutput(test *testing.T, command string, expected_output string) {
+	cmd := exec.Command(
+		"/usr/bin/ssh",
+		"-o BatchMode=yes",
+		"-o StrictHostKeyChecking=no",
+		"-o UserKnownHostsFile=/dev/null",
+		"-i"+TEST_CLIENTKEYPATH,
+		"-p "+TEST_PORT,
+		TEST_USER+"@localhost",
+		"ls",
+	)
+	stdout, err := cmd.StdoutPipe()
+	assertNoError(test, err)
+	err = cmd.Start()
+	assertNoError(test, err)
+	output, err := io.ReadAll(stdout)
+	assertNoError(test, err)
+	err = cmd.Wait()
+	assertNoError(test, err)
+	assertEqual(test, "Unexpected output from command `"+command+"`", "[{\"system\":\"lucos_test\",\"environment\":\"production\"}]\n", string(output))
+}
+func assertSshCommandReturnsError(test *testing.T, command string, expected_exitcode int, expected_output string) {
+	cmd := exec.Command(
+		"/usr/bin/ssh",
+		"-o BatchMode=yes",
+		"-o StrictHostKeyChecking=no",
+		"-o UserKnownHostsFile=/dev/null",
+		"-i"+TEST_CLIENTKEYPATH,
+		"-p "+TEST_PORT,
+		TEST_USER+"@localhost",
+		command,
+	)
+	stdout, err := cmd.StdoutPipe()
+	assertNoError(test, err)
+	err = cmd.Start()
+	assertNoError(test, err)
+	output, err := io.ReadAll(stdout)
+	assertNoError(test, err)
+	err = cmd.Wait()
+	assertNotEqual(test, "Command didn't return an error", nil, err)
+	exitError, _ := err.(*exec.ExitError)
+	assertEqual(test, "Unexpected exit code from command `"+command+"`", expected_exitcode, exitError.ExitCode())
+	assertEqual(test, "Unexpected error message from command `"+command+"`", expected_output, string(output))
+}
+func assertScpCommandReturnsContent(test *testing.T, path string, expected_content string) {
+	testFileName := "test.env"
+	cmd := exec.Command(
+		"/usr/bin/scp",
+		"-s", // Needed for OpenSSH 8.9 which doesn't default to SFTP (can remove for OpenSSH9.0 and above)
+		"-o BatchMode=yes",
+		"-o StrictHostKeyChecking=no",
+		"-o UserKnownHostsFile=/dev/null",
+		"-i"+TEST_CLIENTKEYPATH,
+		"-P "+TEST_PORT,
+		TEST_USER+"@localhost:"+path,
+		testFileName, // would prefer to send straight to /dev/stdout, then read cmd.Output(), but that causes weird errors on my laptop
+	);
+	err := cmd.Run()
+	assertNoError(test, err)
+	contents, err := os.ReadFile(testFileName)
+	assertNoError(test, err)
+	err = os.Remove(testFileName)
+	assertNoError(test, err)
+
+	assertEqual(test, "Unexpected content of "+path, expected_content, string(contents))
+}
 
 func TestMain(m *testing.M) {
 	// Replace the default logger with a no-op logger
@@ -90,52 +170,10 @@ func startTestServer(test *testing.T) (func()) {
 func TestWriteReadEnvFile(test *testing.T) {
 	defer startTestServer(test)()
 
-	cmd := exec.Command(
-		"/usr/bin/ssh",
-		"-o BatchMode=yes",
-		"-o StrictHostKeyChecking=no",
-		"-o UserKnownHostsFile=/dev/null",
-		"-i"+TEST_CLIENTKEYPATH,
-		"-p "+TEST_PORT,
-		TEST_USER+"@localhost",
-		"lucos_test/production/BORING_KEY=yellow",
-	)
-	err := cmd.Run()
-	assertNoError(test, err)
+	assertSshCommandDoesntError(test, "lucos_test/production/BORING_KEY=yellow")
+	assertSshCommandDoesntError(test, "lucos_test/production/OTHERKEY=green")
+	assertScpCommandReturnsContent(test, "lucos_test/production/.env", "BORING_KEY=\"yellow\"\nENVIRONMENT=\"production\"\nOTHERKEY=\"green\"\n")
 
-	cmd = exec.Command(
-		"/usr/bin/ssh",
-		"-o BatchMode=yes",
-		"-o StrictHostKeyChecking=no",
-		"-o UserKnownHostsFile=/dev/null",
-		"-i"+TEST_CLIENTKEYPATH,
-		"-p "+TEST_PORT,
-		TEST_USER+"@localhost",
-		"lucos_test/production/OTHERKEY=green",
-	)
-	err = cmd.Run()
-	assertNoError(test, err)
-
-	testFileName := "test.env"
-	cmd = exec.Command(
-		"/usr/bin/scp",
-		"-s", // Needed for OpenSSH 8.9 which doesn't default to SFTP (can remove for OpenSSH9.0 and above)
-		"-o BatchMode=yes",
-		"-o StrictHostKeyChecking=no",
-		"-o UserKnownHostsFile=/dev/null",
-		"-i"+TEST_CLIENTKEYPATH,
-		"-P "+TEST_PORT,
-		TEST_USER+"@localhost:lucos_test/production/.env",
-		testFileName, // would prefer to send straight to /dev/stdout, then read cmd.Output(), but that causes weird errors on my laptop
-	);
-	err = cmd.Run()
-	assertNoError(test, err)
-	contents, err := os.ReadFile(testFileName)
-	assertNoError(test, err)
-	err = os.Remove(testFileName)
-	assertNoError(test, err)
-
-	assertEqual(test, "Unexpected .env contents", "BORING_KEY=\"yellow\"\nENVIRONMENT=\"production\"\nOTHERKEY=\"green\"\n", string(contents))
 }
 // Requests a file which isn't available on the server
 func TestReadMissingFile(test *testing.T) {
@@ -175,7 +213,6 @@ func TestInvalidUser(test *testing.T) {
 	if err == nil {
 		test.Errorf("No error returned for invalid user %s", err)
 	}
-	defer os.Remove(TEST_CLIENTKEYPATH)
 }
 // Tries to log in with a private key not linked to any authorised public key
 func TestWrongKey(test *testing.T) {
@@ -195,7 +232,6 @@ func TestWrongKey(test *testing.T) {
 	if err == nil {
 		test.Errorf("No error returned for wrong key %s", err)
 	}
-	defer os.Remove(TEST_CLIENTKEYPATH)
 }
 // Tries to log in as Bob, using Alice's private key
 func TestDifferentUsersKey(test *testing.T) {
@@ -224,7 +260,6 @@ func TestDifferentUsersKey(test *testing.T) {
 	if err == nil {
 		test.Errorf("No error returned for switched key %s", err)
 	}
-	defer os.Remove(TEST_CLIENTKEYPATH)
 }
 
 func TestStatePersistsRestart(test *testing.T) {
@@ -236,91 +271,27 @@ func TestStatePersistsRestart(test *testing.T) {
 
 	err := os.WriteFile(TEST_CLIENTKEYPATH, clientPrivateKey, 0700)
 	assertNoError(test, err)
+	defer os.Remove(TEST_CLIENTKEYPATH)
 
-	cmd := exec.Command(
-		"/usr/bin/ssh",
-		"-o BatchMode=yes",
-		"-o StrictHostKeyChecking=no",
-		"-o UserKnownHostsFile=/dev/null",
-		"-i"+TEST_CLIENTKEYPATH,
-		"-p "+TEST_PORT,
-		TEST_USER+"@localhost",
-		"lucos_test/production/BORING_KEY=yellow",
-	)
-	err = cmd.Run()
-	assertNoError(test, err)
+	assertSshCommandDoesntError(test, "lucos_test/production/BORING_KEY=yellow")
+
 
 	closeFirstServer()
 	_, closeSecondServer := startSftpServer(TEST_PORT, serverSigner, initDatastore(TEST_DBPATH, TEST_SERVERKEYPATH, MockLoganne{}), map[string]ssh.PublicKey{TEST_USER: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
 	defer closeSecondServer()
 
-	cmd = exec.Command(
-		"/usr/bin/ssh",
-		"-o BatchMode=yes",
-		"-o StrictHostKeyChecking=no",
-		"-o UserKnownHostsFile=/dev/null",
-		"-i"+TEST_CLIENTKEYPATH,
-		"-p "+TEST_PORT,
-		TEST_USER+"@localhost",
-		"lucos_test/production/OTHERKEY=green",
-	)
-	err = cmd.Run()
-	assertNoError(test, err)
-
-	testFileName := "test.env"
-	cmd = exec.Command(
-		"/usr/bin/scp",
-		"-s", // Needed for OpenSSH 8.9 which doesn't default to SFTP (can remove for OpenSSH9.0 and above)
-		"-o BatchMode=yes",
-		"-o StrictHostKeyChecking=no",
-		"-o UserKnownHostsFile=/dev/null",
-		"-i"+TEST_CLIENTKEYPATH,
-		"-P "+TEST_PORT,
-		TEST_USER+"@localhost:lucos_test/production/.env",
-		testFileName, // would prefer to send straight to /dev/stdout, then read cmd.Output(), but that causes weird errors on my laptop
-	);
-	err = cmd.Run()
-	assertNoError(test, err)
-	contents, err := os.ReadFile(testFileName)
-	assertNoError(test, err)
-	err = os.Remove(testFileName)
-	assertNoError(test, err)
-	defer os.Remove(TEST_CLIENTKEYPATH)
-
-	assertEqual(test, "Unexpected .env contents", "BORING_KEY=\"yellow\"\nENVIRONMENT=\"production\"\nOTHERKEY=\"green\"\n", string(contents))
+	assertSshCommandDoesntError(test, "lucos_test/production/OTHERKEY=green")
+	assertScpCommandReturnsContent(test, "lucos_test/production/.env", "BORING_KEY=\"yellow\"\nENVIRONMENT=\"production\"\nOTHERKEY=\"green\"\n")
 }
 func TestCreateLinkedCredentialOverSSH(test *testing.T) {
 	defer startTestServer(test)()
 
-	cmd := exec.Command(
-		"/usr/bin/ssh",
-		"-o BatchMode=yes",
-		"-o StrictHostKeyChecking=no",
-		"-o UserKnownHostsFile=/dev/null",
-		"-i"+TEST_CLIENTKEYPATH,
-		"-p "+TEST_PORT,
-		TEST_USER+"@localhost",
-		"lucos_test_client/production => lucos_test_server/production",
-	)
-	err := cmd.Run()
-	assertNoError(test, err)
-
-	cmd = exec.Command(
-		"/usr/bin/ssh",
-		"-o BatchMode=yes",
-		"-o StrictHostKeyChecking=no",
-		"-o UserKnownHostsFile=/dev/null",
-		"-i"+TEST_CLIENTKEYPATH,
-		"-p "+TEST_PORT,
-		TEST_USER+"@localhost",
-		"lucos_test_server/production/OTHERKEY=green",
-	)
-	err = cmd.Run()
-	assertNoError(test, err)
+	assertSshCommandDoesntError(test, "lucos_test_client/production => lucos_test_server/production")
+	assertSshCommandDoesntError(test, "lucos_test_server/production/OTHERKEY=green")
 
 	testFileName := "test_client.env"
 	defer os.Remove(testFileName)
-	cmd = exec.Command(
+	cmd := exec.Command(
 		"/usr/bin/scp",
 		"-s", // Needed for OpenSSH 8.9 which doesn't default to SFTP (can remove for OpenSSH9.0 and above)
 		"-o BatchMode=yes",
@@ -331,7 +302,7 @@ func TestCreateLinkedCredentialOverSSH(test *testing.T) {
 		TEST_USER+"@localhost:lucos_test_client/production/.env",
 		testFileName, // would prefer to send straight to /dev/stdout, then read cmd.Output(), but that causes weird errors on my laptop
 	);
-	err = cmd.Run()
+	err := cmd.Run()
 	assertNoError(test, err)
 	contents, err := os.ReadFile(testFileName)
 	assertNoError(test, err)
@@ -340,224 +311,30 @@ func TestCreateLinkedCredentialOverSSH(test *testing.T) {
 	assertEqual(test, "Linked Credential not set properly for client", "KEY_LUCOS_TEST_SERVER", keyvalueparts[0])
 	sharedCredential := strings.Trim(keyvalueparts[1], "\"")
 
-	testFileName = "test_server.env"
-	defer os.Remove(testFileName)
-	cmd = exec.Command(
-		"/usr/bin/scp",
-		"-s", // Needed for OpenSSH 8.9 which doesn't default to SFTP (can remove for OpenSSH9.0 and above)
-		"-o BatchMode=yes",
-		"-o StrictHostKeyChecking=no",
-		"-o UserKnownHostsFile=/dev/null",
-		"-i"+TEST_CLIENTKEYPATH,
-		"-P "+TEST_PORT,
-		TEST_USER+"@localhost:lucos_test_server/production/.env",
-		testFileName, // would prefer to send straight to /dev/stdout, then read cmd.Output(), but that causes weird errors on my laptop
-	);
-	err = cmd.Run()
-	assertNoError(test, err)
-	contents, err = os.ReadFile(testFileName)
-	assertNoError(test, err)
-
-	assertEqual(test, "Unexpected .env contents", "CLIENT_KEYS=\"lucos_test_client:production="+sharedCredential+"\"\nENVIRONMENT=\"production\"\nOTHERKEY=\"green\"\n", string(contents))
+	assertScpCommandReturnsContent(test, "lucos_test_server/production/.env", "CLIENT_KEYS=\"lucos_test_client:production="+sharedCredential+"\"\nENVIRONMENT=\"production\"\nOTHERKEY=\"green\"\n")
 }
 func TestDeleteCredentialOverSSH(test *testing.T) {
 	defer startTestServer(test)()
 
-	cmd := exec.Command(
-		"/usr/bin/ssh",
-		"-o BatchMode=yes",
-		"-o StrictHostKeyChecking=no",
-		"-o UserKnownHostsFile=/dev/null",
-		"-i"+TEST_CLIENTKEYPATH,
-		"-p "+TEST_PORT,
-		TEST_USER+"@localhost",
-		"lucos_test_server/staging/SPECIAL=green",
-	)
-	err := cmd.Run()
-	assertNoError(test, err)
+	assertSshCommandDoesntError(test, "lucos_test_server/staging/SPECIAL=green")
+	assertSshCommandDoesntError(test, "lucos_test_server/staging/SPECIAL=")
+	assertScpCommandReturnsContent(test, "lucos_test_server/staging/.env", "ENVIRONMENT=\"staging\"\n")
 
-	cmd = exec.Command(
-		"/usr/bin/ssh",
-		"-o BatchMode=yes",
-		"-o StrictHostKeyChecking=no",
-		"-o UserKnownHostsFile=/dev/null",
-		"-i"+TEST_CLIENTKEYPATH,
-		"-p "+TEST_PORT,
-		TEST_USER+"@localhost",
-		"lucos_test_server/staging/SPECIAL=",
-	)
-	err = cmd.Run()
-	assertNoError(test, err)
-
-	testFileName := "test.env"
-	defer os.Remove(testFileName)
-	cmd = exec.Command(
-		"/usr/bin/scp",
-		"-s", // Needed for OpenSSH 8.9 which doesn't default to SFTP (can remove for OpenSSH9.0 and above)
-		"-o BatchMode=yes",
-		"-o StrictHostKeyChecking=no",
-		"-o UserKnownHostsFile=/dev/null",
-		"-i"+TEST_CLIENTKEYPATH,
-		"-P "+TEST_PORT,
-		TEST_USER+"@localhost:lucos_test_server/staging/.env",
-		testFileName, // would prefer to send straight to /dev/stdout, then read cmd.Output(), but that causes weird errors on my laptop
-	);
-	err = cmd.Run()
-	assertNoError(test, err)
-	contents, err := os.ReadFile(testFileName)
-	assertNoError(test, err)
-	defer os.Remove(TEST_CLIENTKEYPATH)
-
-	assertEqual(test, "Unexpected .env contents", "ENVIRONMENT=\"staging\"\n", string(contents))
 }
 func TestLsOverSSH(test *testing.T) {
 	defer startTestServer(test)()
 
+	assertSshCommandDoesntError(test, "lucos_test/production/SINGLE_KEY=lilac")
+	assertSshCommandReturnsOutput(test, "ls", "[{\"system\":\"lucos_test\",\"environment\":\"production\"}]\n")
+	assertSshCommandReturnsOutput(test, "ls lucos_test/production", "{\"ENVIRONMENT\":{\"system\":\"lucos_test\",\"environment\":\"production\",\"key\":\"ENVIRONMENT\",\"type\":\"built-in\"},\"SINGLE_KEY\":{\"system\":\"lucos_test\",\"environment\":\"production\",\"key\":\"SINGLE_KEY\",\"type\":\"simple\"}}\n")
 
-	cmd := exec.Command(
-		"/usr/bin/ssh",
-		"-o BatchMode=yes",
-		"-o StrictHostKeyChecking=no",
-		"-o UserKnownHostsFile=/dev/null",
-		"-i"+TEST_CLIENTKEYPATH,
-		"-p "+TEST_PORT,
-		TEST_USER+"@localhost",
-		"lucos_test/production/SINGLE_KEY=lilac",
-	)
-	err := cmd.Run()
-	assertNoError(test, err)
-
-	cmd = exec.Command(
-		"/usr/bin/ssh",
-		"-o BatchMode=yes",
-		"-o StrictHostKeyChecking=no",
-		"-o UserKnownHostsFile=/dev/null",
-		"-i"+TEST_CLIENTKEYPATH,
-		"-p "+TEST_PORT,
-		TEST_USER+"@localhost",
-		"ls",
-	)
-	stdout, err := cmd.StdoutPipe()
-	assertNoError(test, err)
-	err = cmd.Start()
-	assertNoError(test, err)
-	output, err := io.ReadAll(stdout)
-	assertNoError(test, err)
-	err = cmd.Wait()
-	assertNoError(test, err)
-	assertEqual(test, "wrong output from ls", "[{\"system\":\"lucos_test\",\"environment\":\"production\"}]\n", string(output))
-
-	cmd = exec.Command(
-		"/usr/bin/ssh",
-		"-o BatchMode=yes",
-		"-o StrictHostKeyChecking=no",
-		"-o UserKnownHostsFile=/dev/null",
-		"-i"+TEST_CLIENTKEYPATH,
-		"-p "+TEST_PORT,
-		TEST_USER+"@localhost",
-		"ls lucos_test/production",
-	)
-	stdout, err = cmd.StdoutPipe()
-	assertNoError(test, err)
-	err = cmd.Start()
-	assertNoError(test, err)
-	output, err = io.ReadAll(stdout)
-	assertNoError(test, err)
-	err = cmd.Wait()
-	assertNoError(test, err)
-	assertEqual(test, "ls lucos_test/production", "{\"ENVIRONMENT\":{\"system\":\"lucos_test\",\"environment\":\"production\",\"key\":\"ENVIRONMENT\",\"type\":\"built-in\"},\"SINGLE_KEY\":{\"system\":\"lucos_test\",\"environment\":\"production\",\"key\":\"SINGLE_KEY\",\"type\":\"simple\"}}\n", string(output))
 }
 func TestSyntaxError(test *testing.T) {
 	defer startTestServer(test)()
 
-
-	cmd := exec.Command(
-		"/usr/bin/ssh",
-		"-o BatchMode=yes",
-		"-o StrictHostKeyChecking=no",
-		"-o UserKnownHostsFile=/dev/null",
-		"-i"+TEST_CLIENTKEYPATH,
-		"-p "+TEST_PORT,
-		TEST_USER+"@localhost",
-		"lucos_test/production/SINGLE_KEY/extra-param=whoknows",
-	)
-	stdout, err := cmd.StdoutPipe()
-	assertNoError(test, err)
-	err = cmd.Start()
-	assertNoError(test, err)
-	output, err := io.ReadAll(stdout)
-	assertNoError(test, err)
-	err = cmd.Wait()
-	assertNotEqual(test, "Command didn't return an error", nil, err)
-	exitError, _ := err.(*exec.ExitError)
-	assertEqual(test, "Unexpected exit code", StatusBadSyntax, exitError.ExitCode())
-	assertEqual(test, "Wrong error message", "Syntax Error: Unexpected number of slashes\n", string(output))
-
-
-	cmd = exec.Command(
-		"/usr/bin/ssh",
-		"-o BatchMode=yes",
-		"-o StrictHostKeyChecking=no",
-		"-o UserKnownHostsFile=/dev/null",
-		"-i"+TEST_CLIENTKEYPATH,
-		"-p "+TEST_PORT,
-		TEST_USER+"@localhost",
-		"lucos_test/production => lucos_test2/testing/extra-bit",
-	)
-	stdout, err = cmd.StdoutPipe()
-	assertNoError(test, err)
-	err = cmd.Start()
-	assertNoError(test, err)
-	output, err = io.ReadAll(stdout)
-	assertNoError(test, err)
-	err = cmd.Wait()
-	assertNotEqual(test, "Command didn't return an error", nil, err)
-	exitError, _ = err.(*exec.ExitError)
-	assertEqual(test, "Unexpected exit code", StatusBadSyntax, exitError.ExitCode())
-	assertEqual(test, "Wrong error message", "Syntax Error: Unexpected number of slashes\n", string(output))
-
-	cmd = exec.Command(
-		"/usr/bin/ssh",
-		"-o BatchMode=yes",
-		"-o StrictHostKeyChecking=no",
-		"-o UserKnownHostsFile=/dev/null",
-		"-i"+TEST_CLIENTKEYPATH,
-		"-p "+TEST_PORT,
-		TEST_USER+"@localhost",
-		"lucos_test/production => lucos_test2/testing => lucos_test2/staging",
-	)
-	stdout, err = cmd.StdoutPipe()
-	assertNoError(test, err)
-	err = cmd.Start()
-	assertNoError(test, err)
-	output, err = io.ReadAll(stdout)
-	assertNoError(test, err)
-	err = cmd.Wait()
-	assertNotEqual(test, "Command didn't return an error", nil, err)
-	exitError, _ = err.(*exec.ExitError)
-	assertEqual(test, "Unexpected exit code", StatusBadSyntax, exitError.ExitCode())
-	assertEqual(test, "Wrong error message", "Syntax Error: Unexpected number of arrows\n", string(output))
-
-	cmd = exec.Command(
-		"/usr/bin/ssh",
-		"-o BatchMode=yes",
-		"-o StrictHostKeyChecking=no",
-		"-o UserKnownHostsFile=/dev/null",
-		"-i"+TEST_CLIENTKEYPATH,
-		"-p "+TEST_PORT,
-		TEST_USER+"@localhost",
-		"ls lucos_test2/testing/KEYNAME/extra-param",
-	)
-	stdout, err = cmd.StdoutPipe()
-	assertNoError(test, err)
-	err = cmd.Start()
-	assertNoError(test, err)
-	output, err = io.ReadAll(stdout)
-	assertNoError(test, err)
-	err = cmd.Wait()
-	assertNotEqual(test, "Command didn't return an error", nil, err)
-	exitError, _ = err.(*exec.ExitError)
-	assertEqual(test, "Unexpected exit code", StatusBadSyntax, exitError.ExitCode())
-	assertEqual(test, "Wrong error message", "Syntax Error: Unexpected number of slashes\n", string(output))
+	assertSshCommandReturnsError(test, "lucos_test/production/SINGLE_KEY/extra-param=whoknows", StatusBadSyntax, "Syntax Error: Unexpected number of slashes\n")
+	assertSshCommandReturnsError(test, "lucos_test/production => lucos_test2/testing/extra-bit", StatusBadSyntax, "Syntax Error: Unexpected number of slashes\n")
+	assertSshCommandReturnsError(test, "lucos_test/production => lucos_test2/testing => lucos_test2/staging", StatusBadSyntax, "Syntax Error: Unexpected number of arrows\n")
+	assertSshCommandReturnsError(test, "ls lucos_test2/testing/KEYNAME/extra-param", StatusBadSyntax, "Syntax Error: Unexpected number of slashes\n")
 
 }
