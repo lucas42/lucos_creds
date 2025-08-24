@@ -11,9 +11,31 @@
 		<h2>Environment Variables Currently Set</h2>
 		<ul>
 			<% for(const key in creds) { %>
-			<li><%= key %> (<%= creds[key].type %>)</li>
+			<li>
+				<%= key %>
+				<% if (creds[key].type == "simple") { %>
+					<form action="/update-simple-credential" method="get">
+						<input type="hidden" name="system" value="<%= system %>" />
+						<input type="hidden" name="environment" value="<%= environment %>" />
+						<input type="hidden" name="key" value="<%= key %>" />
+						<input type="submit" value="Edit" />
+					</form>
+					<form action="/delete-simple-credential" method="get">
+						<input type="hidden" name="system" value="<%= system %>" />
+						<input type="hidden" name="environment" value="<%= environment %>" />
+						<input type="hidden" name="key" value="<%= key %>" />
+						<input type="submit" value="Delete" />
+					</form>
+				<% } %>
+			(<%= creds[key].type %>)
+			</li>
 			<% } %>
 		</ul>
+		<form action="/update-simple-credential" method="get">
+			<input type="hidden" name="system" value="<%= system %>" />
+			<input type="hidden" name="environment" value="<%= environment %>" />
+			<input type="submit" value="Add New Credential" />
+		</form>
 		<script type="text/javascript" src="/client.js"></script>
 	</body>
 </html>

@@ -14,6 +14,7 @@ fs.writeFileSync('/root/.ssh/id_ed25519', process.env.UI_PRIVATE_SSH_KEY.replace
 
 app.set('view engine', 'ejs');
 app.use(express.json());
+app.use(express.urlencoded());
 app.use(express.static('./resources', {extensions: ['json']}));
 
 // Avoid authentication for _info, so call before invoking auth middleware
@@ -59,6 +60,42 @@ app.get('/system/:system/:environment', catchErrors(async (req, res) => {
 	});
 }));
 
+app.get('/update-simple-credential', catchErrors(async (req, res) => {
+	let value;
+	if (req.query.system && req.query.environment && req.query.key) {
+
+	}
+	res.render('update-simple-credential', {
+		system: req.query.system,
+		environment: req.query.environment,
+		key: req.query.key,
+		value,
+	});
+}));
+app.post('/update-simple-credential', catchErrors(async (req, res) => {
+	const { system, environment, key, value } = req.body;
+	const params = new URLSearchParams({system, environment, key});
+	if (!value) { // Doing an update without a value causes a delete - check the user wants to do this by redirecting to the delete page instead
+		res.redirect(303, '/delete-simple-credential?'+params.toString());
+		return;
+	}
+	await sshExec(`${system}/${environment}/${key}=${value}`);
+	res.redirect(303, '/update-simple-credential?'+params.toString());
+}));
+
+app.get('/delete-simple-credential', catchErrors(async (req, res) => {
+	res.render('delete-simple-credential', {
+		system: req.query.system,
+		environment: req.query.environment,
+		key: req.query.key,
+	});
+}));
+app.post('/delete-simple-credential', catchErrors(async (req, res) => {
+	const { system, environment, key } = req.body;
+	await sshExec(`${system}/${environment}/${key}=`);
+	res.redirect(303, `/system/${system}/${environment}`);
+}));
+
 app.listen(port, () => {
 	console.log(`UI listening on port ${port}`)
 });
@@ -72,14 +109,19 @@ function catchErrors(controllerFunc) {
 
 // Returns an array of objects listing available system/environment combos
 async function getSystemEnvironments() {
-	const output = await exec(`ssh -p 2202 lucos_creds ls`);
-	return JSON.parse(output.stdout);
+	const output = await sshExec(`ls`);
+	return JSON.parse(output);
 }
 
 // Returns an array of environment variable names which are set for a given system & environment
 async function getCredList(system, environment) {
-	const output = await exec(`ssh -p 2202 lucos_creds ls ${system}/${environment}`);
-	return JSON.parse(output.stdout);
+	const output = await sshExec(`ls ${system}/${environment}`);
+	return JSON.parse(output);
+}
+
+async function sshExec(command) {
+	const output = await exec(`ssh -p 2202 lucos_creds ${command}`);
+	return output.stdout;
 }
 
 async function checkServerConnection() {
