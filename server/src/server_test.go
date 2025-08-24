@@ -13,12 +13,12 @@ import (
 
 func assertEqual(test *testing.T, message string, expected interface{}, actual interface{}) {
 	if !reflect.DeepEqual(expected, actual) {
-		test.Errorf("%s. Expected: %s, Actual: %s", message, expected, actual)
+		test.Errorf("%s. Expected: %s, Actual: %s.", message, expected, actual)
 	}
 }
 func assertNotEqual(test *testing.T, message string, expected interface{}, actual interface{}) {
 	if reflect.DeepEqual(expected, actual) {
-		test.Errorf("%s. Expected: %s, Actual: %s", message, expected, actual)
+		test.Errorf("%s. Expected: %s, Actual: %s.", message, expected, actual)
 	}
 }
 func assertNoError(test *testing.T, err error) {
@@ -45,6 +45,7 @@ func assertSshCommandDoesntError(test *testing.T, command string) {
 		"-o BatchMode=yes",
 		"-o StrictHostKeyChecking=no",
 		"-o UserKnownHostsFile=/dev/null",
+		"-o LogLevel ERROR",
 		"-i"+TEST_CLIENTKEYPATH,
 		"-p "+TEST_PORT,
 		TEST_USER+"@localhost",
@@ -59,6 +60,7 @@ func assertSshCommandReturnsOutput(test *testing.T, command string, expected_out
 		"-o BatchMode=yes",
 		"-o StrictHostKeyChecking=no",
 		"-o UserKnownHostsFile=/dev/null",
+		"-o LogLevel ERROR",
 		"-i"+TEST_CLIENTKEYPATH,
 		"-p "+TEST_PORT,
 		TEST_USER+"@localhost",
@@ -80,22 +82,31 @@ func assertSshCommandReturnsError(test *testing.T, command string, expected_exit
 		"-o BatchMode=yes",
 		"-o StrictHostKeyChecking=no",
 		"-o UserKnownHostsFile=/dev/null",
+		"-o LogLevel ERROR",
 		"-i"+TEST_CLIENTKEYPATH,
 		"-p "+TEST_PORT,
 		TEST_USER+"@localhost",
 		command,
 	)
+	assertCommandReturnsError(test, cmd, expected_exitcode, expected_output, "")
+}
+func assertCommandReturnsError(test *testing.T, cmd *exec.Cmd, expected_exitcode int, expected_stdout string, expected_stderr string) {
 	stdout, err := cmd.StdoutPipe()
+	assertNoError(test, err)
+	stderr, err := cmd.StderrPipe()
 	assertNoError(test, err)
 	err = cmd.Start()
 	assertNoError(test, err)
-	output, err := io.ReadAll(stdout)
+	stdout_output, err := io.ReadAll(stdout)
+	assertNoError(test, err)
+	stderr_output, err := io.ReadAll(stderr)
 	assertNoError(test, err)
 	err = cmd.Wait()
 	assertNotEqual(test, "Command didn't return an error", nil, err)
 	exitError, _ := err.(*exec.ExitError)
-	assertEqual(test, "Unexpected exit code from command `"+command+"`", expected_exitcode, exitError.ExitCode())
-	assertEqual(test, "Unexpected error message from command `"+command+"`", expected_output, string(output))
+	assertEqual(test, "Unexpected exit code from command", expected_exitcode, exitError.ExitCode())
+	assertEqual(test, "Unexpected stdout from command", expected_stdout, string(stdout_output))
+	assertEqual(test, "Unexpected stderr from command", expected_stderr, string(stderr_output))
 }
 func assertScpCommandReturnsContent(test *testing.T, path string, expected_content string) {
 	testFileName := "test.env"
@@ -184,16 +195,13 @@ func TestReadMissingFile(test *testing.T) {
 		"-o BatchMode=yes",
 		"-o StrictHostKeyChecking=no",
 		"-o UserKnownHostsFile=/dev/null",
+		"-o LogLevel ERROR",
 		"-i"+TEST_CLIENTKEYPATH,
 		"-P "+TEST_PORT,
 		TEST_USER+"@localhost:unknown_file.txt",
 		"/dev/null", // would prefer to send straight to /dev/stdout, then read cmd.Output(), but that causes weird errors on my laptop
 	);
-	err := cmd.Run()
-	if err == nil {
-		test.Errorf("No error returned requesting missing file %s", err)
-	}
-	defer os.Remove(TEST_CLIENTKEYPATH)
+	assertCommandReturnsError(test, cmd, 255, "", "/usr/bin/scp: Connection closed\r\n")
 }
 // Tries to log in as a user who isn't on the authorised list
 func TestInvalidUser(test *testing.T) {
@@ -204,34 +212,33 @@ func TestInvalidUser(test *testing.T) {
 		"-o BatchMode=yes",
 		"-o StrictHostKeyChecking=no",
 		"-o UserKnownHostsFile=/dev/null",
+		"-o LogLevel ERROR",
 		"-i"+TEST_CLIENTKEYPATH,
 		"-P "+TEST_PORT,
 		"bobby@localhost:.env",
 		"/dev/null", // would prefer to send straight to /dev/stdout, then read cmd.Output(), but that causes weird errors on my laptop
 	);
-	err := cmd.Run()
-	if err == nil {
-		test.Errorf("No error returned for invalid user %s", err)
-	}
+	assertCommandReturnsError(test, cmd, 255, "", "bobby@localhost: Permission denied (publickey).\r\n/usr/bin/scp: Connection closed\r\n")
 }
 // Tries to log in with a private key not linked to any authorised public key
 func TestWrongKey(test *testing.T) {
 	defer startTestServer(test)()
+	_, incorrectClientPrivateKey := getKeyAndSigner(test)
+	err := os.WriteFile(TEST_CLIENTKEYPATH, incorrectClientPrivateKey, 0700)
+	assertNoError(test, err)
 	cmd := exec.Command(
 		"/usr/bin/scp",
 		"-s", // Needed for OpenSSH 8.9 which doesn't default to SFTP (can remove for OpenSSH9.0 and above)
 		"-o BatchMode=yes",
 		"-o StrictHostKeyChecking=no",
 		"-o UserKnownHostsFile=/dev/null",
+		"-o LogLevel ERROR",
 		"-i"+TEST_CLIENTKEYPATH,
 		"-P "+TEST_PORT,
-		TEST_USER+"@localhost:.env",
+		TEST_USER+"@localhost:/lucos_test/production.env",
 		"/dev/null", // would prefer to send straight to /dev/stdout, then read cmd.Output(), but that causes weird errors on my laptop
 	);
-	err := cmd.Run()
-	if err == nil {
-		test.Errorf("No error returned for wrong key %s", err)
-	}
+	assertCommandReturnsError(test, cmd, 255, "", "bob@localhost: Permission denied (publickey).\r\n/usr/bin/scp: Connection closed\r\n")
 }
 // Tries to log in as Bob, using Alice's private key
 func TestDifferentUsersKey(test *testing.T) {
@@ -251,15 +258,13 @@ func TestDifferentUsersKey(test *testing.T) {
 		"-o BatchMode=yes",
 		"-o StrictHostKeyChecking=no",
 		"-o UserKnownHostsFile=/dev/null",
+		"-o LogLevel ERROR",
 		"-i"+TEST_CLIENTKEYPATH,
 		"-P "+TEST_PORT,
 		"bob@localhost:.env",
 		"/dev/null", // would prefer to send straight to /dev/stdout, then read cmd.Output(), but that causes weird errors on my laptop
 	);
-	err = cmd.Run()
-	if err == nil {
-		test.Errorf("No error returned for switched key %s", err)
-	}
+	assertCommandReturnsError(test, cmd, 255, "", "bob@localhost: Permission denied (publickey).\r\n/usr/bin/scp: Connection closed\r\n")
 }
 
 func TestStatePersistsRestart(test *testing.T) {
@@ -297,6 +302,7 @@ func TestCreateLinkedCredentialOverSSH(test *testing.T) {
 		"-o BatchMode=yes",
 		"-o StrictHostKeyChecking=no",
 		"-o UserKnownHostsFile=/dev/null",
+		"-o LogLevel ERROR",
 		"-i"+TEST_CLIENTKEYPATH,
 		"-P "+TEST_PORT,
 		TEST_USER+"@localhost:lucos_test_client/production/.env",
