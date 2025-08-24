@@ -62,15 +62,20 @@ app.get('/system/:system/:environment', catchErrors(async (req, res) => {
 
 app.get('/update-simple-credential', catchErrors(async (req, res) => {
 	let value;
+	let type = "unset";
+	let { system, environment, key, error } = req.query
 	if (req.query.system && req.query.environment && req.query.key) {
-
+		try {
+			({ system, environment, key, value, type } = await getCredential(system, environment, key));
+			if (type != "simple" && !error) error = `Warning: Can't update ${type} credentials`;
+		} catch {}
 	}
 	res.render('update-simple-credential', {
-		system: req.query.system,
-		environment: req.query.environment,
-		key: req.query.key,
+		system,
+		environment,
+		key,
 		value,
-		error: req.query.error,
+		error,
 	});
 }));
 app.post('/update-simple-credential', catchErrors(async (req, res) => {
@@ -137,6 +142,12 @@ async function getSystemEnvironments() {
 // Returns an array of environment variable names which are set for a given system & environment
 async function getCredList(system, environment) {
 	const output = await sshExec(`ls ${system}/${environment}`);
+	return JSON.parse(output);
+}
+
+// Returns an object of info about a given crential
+async function getCredential(system, environment, key) {
+	const output = await sshExec(`ls ${system}/${environment}/${key}`);
 	return JSON.parse(output);
 }
 
