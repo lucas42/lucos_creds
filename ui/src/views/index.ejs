@@ -14,7 +14,7 @@
 			<% for(const systemid in systems) {
 				const system = systems[systemid];
 				%>
-				<h2 class="system-name"><%= system.code.replace("_", " ") %></h2>
+				<h2 class="system-name"><%= system.code.replaceAll("_", " ") %></h2>
 				<ul class="environment-list">
 					<% for(var ii = 0; ii < system.environments.length; ii++) {
 						const environment = system.environments[ii];
