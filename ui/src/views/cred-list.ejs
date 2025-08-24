@@ -6,8 +6,7 @@
 		<link rel="icon" href="/icon.png" />
 	</head>
 	<body>
-		<lucos-navbar>Credential List</lucos-navbar>
-		<a href="/">&lt;- Home</a>
+		<lucos-navbar><a href="/">Credential List</a></lucos-navbar>
 		<main>
 			<h1><span class="system-name"><%= system.replace("_", " ") %>:</span> <span class="environment-name environment-<%= environment %>"><%= environment %></span></h1>
 			<form action="/update-simple-credential" method="get" class="inline-form">
