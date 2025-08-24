@@ -70,6 +70,7 @@ app.get('/update-simple-credential', catchErrors(async (req, res) => {
 		environment: req.query.environment,
 		key: req.query.key,
 		value,
+		error: req.query.error,
 	});
 }));
 app.post('/update-simple-credential', catchErrors(async (req, res) => {
@@ -79,7 +80,15 @@ app.post('/update-simple-credential', catchErrors(async (req, res) => {
 		res.redirect(303, '/delete-simple-credential?'+params.toString());
 		return;
 	}
-	await sshExec(`${system}/${environment}/${key}=${value}`);
+	try {
+		await sshExec(`${system}/${environment}/${key}=${value}`);
+	} catch (error) {
+		if (error.code == 4) {
+			params.append('error', error.stdout.trim());
+		} else {
+			throw error;
+		}
+	}
 	res.redirect(303, '/update-simple-credential?'+params.toString());
 }));
 
@@ -88,11 +97,23 @@ app.get('/delete-simple-credential', catchErrors(async (req, res) => {
 		system: req.query.system,
 		environment: req.query.environment,
 		key: req.query.key,
+		error: req.query.error,
 	});
 }));
 app.post('/delete-simple-credential', catchErrors(async (req, res) => {
 	const { system, environment, key } = req.body;
-	await sshExec(`${system}/${environment}/${key}=`);
+	try {
+		await sshExec(`${system}/${environment}/${key}=`);
+	} catch (error) {
+		if (error.code == 4) {
+			const params = new URLSearchParams({system, environment, key});
+			params.append('error', error.stdout.trim());
+			res.redirect(303, '/delete-simple-credential?'+params.toString());
+			return;
+		} else {
+			throw error;
+		}
+	}
 	res.redirect(303, `/system/${system}/${environment}`);
 }));
 
