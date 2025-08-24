@@ -125,9 +125,12 @@ func handleSshConnection(connection net.Conn, config *ssh.ServerConfig, datastor
 							}
 						}
 					} else {
-						payloadParts := strings.Split(payload.Data, "=")
+						payloadParts := strings.SplitN(payload.Data, "=", 2)
 						isValid, system, environment, key := parseFileHandle(payloadParts[0])
-						if (len(payloadParts) != 2 || !isValid) {
+						if (len(payloadParts) != 2) {
+							exitStatus.code = StatusBadSyntax
+							channel.Write([]byte("Syntax Error: No assignment character found\n"))
+						} else if (!isValid) {
 							exitStatus.code = StatusBadSyntax
 							channel.Write([]byte("Syntax Error: Unexpected number of slashes\n"))
 						} else {

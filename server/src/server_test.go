@@ -288,6 +288,13 @@ func TestStatePersistsRestart(test *testing.T) {
 	assertSshCommandDoesntError(test, "lucos_test/production/OTHERKEY=green")
 	assertScpCommandReturnsContent(test, "lucos_test/production/.env", "BORING_KEY=\"yellow\"\nENVIRONMENT=\"production\"\nOTHERKEY=\"green\"\n")
 }
+func TestCreateSimpleCredentialOverSSH(test *testing.T) {
+	defer startTestServer(test)()
+
+	assertSshCommandDoesntError(test, "lucos_test/production/BORING_KEY=lilac")
+	assertSshCommandDoesntError(test, "lucos_test/production/COMPLEX_KEY=---BEGIN KEY---\nabc12523===\n---END KEY---\n") // Include value with equal signs in to ensure they get parsed properly
+	assertScpCommandReturnsContent(test, "lucos_test/production/.env", "BORING_KEY=\"lilac\"\nCOMPLEX_KEY=\"---BEGIN KEY---\nabc12523===\n---END KEY---\n\"\nENVIRONMENT=\"production\"\n")
+}
 func TestCreateLinkedCredentialOverSSH(test *testing.T) {
 	defer startTestServer(test)()
 
@@ -342,5 +349,6 @@ func TestSyntaxError(test *testing.T) {
 	assertSshCommandReturnsError(test, "lucos_test/production => lucos_test2/testing/extra-bit", StatusBadSyntax, "Syntax Error: Unexpected number of slashes\n")
 	assertSshCommandReturnsError(test, "lucos_test/production => lucos_test2/testing => lucos_test2/staging", StatusBadSyntax, "Syntax Error: Unexpected number of arrows\n")
 	assertSshCommandReturnsError(test, "ls lucos_test2/testing/KEYNAME/extra-param", StatusBadSyntax, "Syntax Error: Unexpected number of slashes\n")
+	assertSshCommandReturnsError(test, "lucos_test2/testing/KEYNAME", StatusBadSyntax, "Syntax Error: No assignment character found\n")
 
 }
