@@ -322,6 +322,8 @@ func TestLsOverSSH(test *testing.T) {
 	assertSshCommandReturnsOutput(test, "ls", "[{\"system\":\"lucos_test\",\"environment\":\"production\"}]\n")
 	assertSshCommandReturnsOutput(test, "ls lucos_test/production", "{\"ENVIRONMENT\":{\"system\":\"lucos_test\",\"environment\":\"production\",\"key\":\"ENVIRONMENT\",\"type\":\"built-in\"},\"SINGLE_KEY\":{\"system\":\"lucos_test\",\"environment\":\"production\",\"key\":\"SINGLE_KEY\",\"type\":\"simple\"}}\n")
 
+	assertSshCommandReturnsOutput(test, "ls lucos_test/production/Single_key", "{\"system\":\"lucos_test\",\"environment\":\"production\",\"key\":\"SINGLE_KEY\",\"type\":\"simple\",\"value\":\"lilac\"}\n")
+	assertSshCommandReturnsError(test, "ls lucos_test/production/UNKnoWN_KEY", StatusNotFound, "Can't find credential with key `UNKNOWN_KEY`\n")
 }
 func TestSyntaxErrors(test *testing.T) {
 	defer startTestServer(test)()

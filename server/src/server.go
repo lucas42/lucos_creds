@@ -15,6 +15,7 @@ import (
 const (
 	StatusOk = 0              // Everything went as expected
 	StatusBadSyntax = 1       // The call to the server wasn't understood
+	StatusNotFound = 3        // The relevant object couldn't be found
 	StatusValidationError = 4 // The call asked to do something which isn't allowed
 	StatusInternalError = 5   // The request couldn't be fufilled because of an error in the server
 )
@@ -81,10 +82,7 @@ func handleSshConnection(connection net.Conn, config *ssh.ServerConfig, datastor
 							channel.Write(output)
 						} else {
 							commandParts := strings.Split(command, "/")
-							if len(commandParts) != 2 {
-								exitStatus.code = StatusBadSyntax
-								channel.Write([]byte("Syntax Error: Unexpected number of slashes\n"))
-							} else {
+							if len(commandParts) == 2 {
 								system := commandParts[0]
 								environment := commandParts[1]
 								credentialList, err := datastore.getNormalisedCredentialsBySystemEnvironment(system, environment)
@@ -103,6 +101,31 @@ func handleSshConnection(connection net.Conn, config *ssh.ServerConfig, datastor
 								}
 								output = append(output, '\n')
 								channel.Write(output)
+							} else if len(commandParts) == 3 {
+								system := commandParts[0]
+								environment := commandParts[1]
+								key := strings.ToUpper(commandParts[2])
+								credentialList, err := datastore.getNormalisedCredentialsBySystemEnvironment(system, environment)
+								if err != nil {
+									exitStatus.code = StatusInternalError
+									slog.Warn("Failed to get credentials", slog.Any("error", err))
+								}
+								credential, found := credentialList[key]
+								if found {
+									output, err := json.Marshal(credential)
+									if err != nil {
+										exitStatus.code = StatusInternalError
+										slog.Warn("Failed to marshal JSON", slog.Any("error", err))
+									}
+									output = append(output, '\n')
+									channel.Write(output)
+								} else {
+									exitStatus.code = StatusNotFound
+									channel.Write([]byte("Can't find credential with key `"+key+"`\n"))
+								}
+							} else {
+								exitStatus.code = StatusBadSyntax
+								channel.Write([]byte("Syntax Error: Unexpected number of slashes\n"))
 							}
 						}
 					} else if (strings.Contains(payload.Data, "=>")) {
