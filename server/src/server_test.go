@@ -39,21 +39,6 @@ func assertMapNotContains(test *testing.T, message string, expected string, actu
 		test.Errorf("%s. Expected key: %s found in map: %s", message, expected, actual)
 	}
 }
-func assertSshCommandDoesntError(test *testing.T, command string) {
-	cmd := exec.Command(
-		"/usr/bin/ssh",
-		"-o BatchMode=yes",
-		"-o StrictHostKeyChecking=no",
-		"-o UserKnownHostsFile=/dev/null",
-		"-o LogLevel ERROR",
-		"-i"+TEST_CLIENTKEYPATH,
-		"-p "+TEST_PORT,
-		TEST_USER+"@localhost",
-		command,
-	)
-	err := cmd.Run()
-	assertNoError(test, err)
-}
 func assertSshCommandReturnsOutput(test *testing.T, command string, expected_output string) {
 	cmd := exec.Command(
 		"/usr/bin/ssh",
@@ -66,15 +51,7 @@ func assertSshCommandReturnsOutput(test *testing.T, command string, expected_out
 		TEST_USER+"@localhost",
 		command,
 	)
-	stdout, err := cmd.StdoutPipe()
-	assertNoError(test, err)
-	err = cmd.Start()
-	assertNoError(test, err)
-	output, err := io.ReadAll(stdout)
-	assertNoError(test, err)
-	err = cmd.Wait()
-	assertNoError(test, err)
-	assertEqual(test, "Unexpected output from command `"+command+"`", expected_output, string(output))
+	assertCommandOutput(test, cmd, StatusOk, expected_output, "")
 }
 func assertSshCommandReturnsError(test *testing.T, command string, expected_exitcode int, expected_output string) {
 	cmd := exec.Command(
@@ -88,9 +65,9 @@ func assertSshCommandReturnsError(test *testing.T, command string, expected_exit
 		TEST_USER+"@localhost",
 		command,
 	)
-	assertCommandReturnsError(test, cmd, expected_exitcode, expected_output, "")
+	assertCommandOutput(test, cmd, expected_exitcode, expected_output, "")
 }
-func assertCommandReturnsError(test *testing.T, cmd *exec.Cmd, expected_exitcode int, expected_stdout string, expected_stderr string) {
+func assertCommandOutput(test *testing.T, cmd *exec.Cmd, expected_exitcode int, expected_stdout string, expected_stderr string) {
 	stdout, err := cmd.StdoutPipe()
 	assertNoError(test, err)
 	stderr, err := cmd.StderrPipe()
@@ -102,9 +79,13 @@ func assertCommandReturnsError(test *testing.T, cmd *exec.Cmd, expected_exitcode
 	stderr_output, err := io.ReadAll(stderr)
 	assertNoError(test, err)
 	err = cmd.Wait()
-	assertNotEqual(test, "Command didn't return an error", nil, err)
-	exitError, _ := err.(*exec.ExitError)
-	assertEqual(test, "Unexpected exit code from command", expected_exitcode, exitError.ExitCode())
+	if (expected_exitcode == StatusOk) {
+		assertNoError(test, err)
+	} else {
+		assertNotEqual(test, "Command didn't return an error", nil, err)
+		exitError, _ := err.(*exec.ExitError)
+		assertEqual(test, "Unexpected exit code from command", expected_exitcode, exitError.ExitCode())
+	}
 	assertEqual(test, "Unexpected stdout from command", expected_stdout, string(stdout_output))
 	assertEqual(test, "Unexpected stderr from command", expected_stderr, string(stderr_output))
 }
@@ -181,8 +162,8 @@ func startTestServer(test *testing.T) (func()) {
 func TestWriteReadEnvFile(test *testing.T) {
 	defer startTestServer(test)()
 
-	assertSshCommandDoesntError(test, "lucos_test/production/BORING_KEY=yellow")
-	assertSshCommandDoesntError(test, "lucos_test/production/OTHERKEY=green")
+	assertSshCommandReturnsOutput(test, "lucos_test/production/BORING_KEY=yellow", "")
+	assertSshCommandReturnsOutput(test, "lucos_test/production/OTHERKEY=green", "")
 	assertScpCommandReturnsContent(test, "lucos_test/production/.env", "BORING_KEY=\"yellow\"\nENVIRONMENT=\"production\"\nOTHERKEY=\"green\"\n")
 
 }
@@ -201,7 +182,7 @@ func TestReadMissingFile(test *testing.T) {
 		TEST_USER+"@localhost:unknown_file.txt",
 		"/dev/null", // would prefer to send straight to /dev/stdout, then read cmd.Output(), but that causes weird errors on my laptop
 	);
-	assertCommandReturnsError(test, cmd, 255, "", "/usr/bin/scp: Connection closed\r\n")
+	assertCommandOutput(test, cmd, 255, "", "/usr/bin/scp: Connection closed\r\n")
 }
 // Tries to log in as a user who isn't on the authorised list
 func TestInvalidUser(test *testing.T) {
@@ -218,7 +199,7 @@ func TestInvalidUser(test *testing.T) {
 		"bobby@localhost:.env",
 		"/dev/null", // would prefer to send straight to /dev/stdout, then read cmd.Output(), but that causes weird errors on my laptop
 	);
-	assertCommandReturnsError(test, cmd, 255, "", "bobby@localhost: Permission denied (publickey).\r\n/usr/bin/scp: Connection closed\r\n")
+	assertCommandOutput(test, cmd, 255, "", "bobby@localhost: Permission denied (publickey).\r\n/usr/bin/scp: Connection closed\r\n")
 }
 // Tries to log in with a private key not linked to any authorised public key
 func TestWrongKey(test *testing.T) {
@@ -238,7 +219,7 @@ func TestWrongKey(test *testing.T) {
 		TEST_USER+"@localhost:/lucos_test/production.env",
 		"/dev/null", // would prefer to send straight to /dev/stdout, then read cmd.Output(), but that causes weird errors on my laptop
 	);
-	assertCommandReturnsError(test, cmd, 255, "", "bob@localhost: Permission denied (publickey).\r\n/usr/bin/scp: Connection closed\r\n")
+	assertCommandOutput(test, cmd, 255, "", "bob@localhost: Permission denied (publickey).\r\n/usr/bin/scp: Connection closed\r\n")
 }
 // Tries to log in as Bob, using Alice's private key
 func TestDifferentUsersKey(test *testing.T) {
@@ -264,7 +245,7 @@ func TestDifferentUsersKey(test *testing.T) {
 		"bob@localhost:.env",
 		"/dev/null", // would prefer to send straight to /dev/stdout, then read cmd.Output(), but that causes weird errors on my laptop
 	);
-	assertCommandReturnsError(test, cmd, 255, "", "bob@localhost: Permission denied (publickey).\r\n/usr/bin/scp: Connection closed\r\n")
+	assertCommandOutput(test, cmd, 255, "", "bob@localhost: Permission denied (publickey).\r\n/usr/bin/scp: Connection closed\r\n")
 }
 
 func TestStatePersistsRestart(test *testing.T) {
@@ -278,28 +259,28 @@ func TestStatePersistsRestart(test *testing.T) {
 	assertNoError(test, err)
 	defer os.Remove(TEST_CLIENTKEYPATH)
 
-	assertSshCommandDoesntError(test, "lucos_test/production/BORING_KEY=yellow")
+	assertSshCommandReturnsOutput(test, "lucos_test/production/BORING_KEY=yellow", "")
 
 
 	closeFirstServer()
 	_, closeSecondServer := startSftpServer(TEST_PORT, serverSigner, initDatastore(TEST_DBPATH, TEST_SERVERKEYPATH, MockLoganne{}), map[string]ssh.PublicKey{TEST_USER: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
 	defer closeSecondServer()
 
-	assertSshCommandDoesntError(test, "lucos_test/production/OTHERKEY=green")
+	assertSshCommandReturnsOutput(test, "lucos_test/production/OTHERKEY=green", "")
 	assertScpCommandReturnsContent(test, "lucos_test/production/.env", "BORING_KEY=\"yellow\"\nENVIRONMENT=\"production\"\nOTHERKEY=\"green\"\n")
 }
 func TestCreateSimpleCredentialOverSSH(test *testing.T) {
 	defer startTestServer(test)()
 
-	assertSshCommandDoesntError(test, "lucos_test/production/BORING_KEY=lilac")
-	assertSshCommandDoesntError(test, "lucos_test/production/COMPLEX_KEY=---BEGIN KEY---\nabc12523===\n---END KEY---\n") // Include value with equal signs in to ensure they get parsed properly
+	assertSshCommandReturnsOutput(test, "lucos_test/production/BORING_KEY=lilac", "")
+	assertSshCommandReturnsOutput(test, "lucos_test/production/COMPLEX_KEY=---BEGIN KEY---\nabc12523===\n---END KEY---\n", "") // Include value with equal signs in to ensure they get parsed properly
 	assertScpCommandReturnsContent(test, "lucos_test/production/.env", "BORING_KEY=\"lilac\"\nCOMPLEX_KEY=\"---BEGIN KEY---\nabc12523===\n---END KEY---\n\"\nENVIRONMENT=\"production\"\n")
 }
 func TestCreateLinkedCredentialOverSSH(test *testing.T) {
 	defer startTestServer(test)()
 
-	assertSshCommandDoesntError(test, "lucos_test_client/production => lucos_test_server/production")
-	assertSshCommandDoesntError(test, "lucos_test_server/production/OTHERKEY=green")
+	assertSshCommandReturnsOutput(test, "lucos_test_client/production => lucos_test_server/production", "")
+	assertSshCommandReturnsOutput(test, "lucos_test_server/production/OTHERKEY=green", "")
 
 	testFileName := "test_client.env"
 	defer os.Remove(testFileName)
@@ -329,15 +310,15 @@ func TestCreateLinkedCredentialOverSSH(test *testing.T) {
 func TestDeleteCredentialOverSSH(test *testing.T) {
 	defer startTestServer(test)()
 
-	assertSshCommandDoesntError(test, "lucos_test_server/staging/SPECIAL=green")
-	assertSshCommandDoesntError(test, "lucos_test_server/staging/SPECIAL=")
+	assertSshCommandReturnsOutput(test, "lucos_test_server/staging/SPECIAL=green", "")
+	assertSshCommandReturnsOutput(test, "lucos_test_server/staging/SPECIAL=", "")
 	assertScpCommandReturnsContent(test, "lucos_test_server/staging/.env", "ENVIRONMENT=\"staging\"\n")
 
 }
 func TestLsOverSSH(test *testing.T) {
 	defer startTestServer(test)()
 
-	assertSshCommandDoesntError(test, "lucos_test/production/SINGLE_KEY=lilac")
+	assertSshCommandReturnsOutput(test, "lucos_test/production/SINGLE_KEY=lilac", "")
 	assertSshCommandReturnsOutput(test, "ls", "[{\"system\":\"lucos_test\",\"environment\":\"production\"}]\n")
 	assertSshCommandReturnsOutput(test, "ls lucos_test/production", "{\"ENVIRONMENT\":{\"system\":\"lucos_test\",\"environment\":\"production\",\"key\":\"ENVIRONMENT\",\"type\":\"built-in\"},\"SINGLE_KEY\":{\"system\":\"lucos_test\",\"environment\":\"production\",\"key\":\"SINGLE_KEY\",\"type\":\"simple\"}}\n")
 
