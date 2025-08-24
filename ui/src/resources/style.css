@@ -100,3 +100,15 @@ h1 {
 .environment-list a:hover {
 	text-decoration: underline;
 }
+.error {
+	background: #900;
+	color: #fff;
+	padding: 5px 10px;
+	border: solid #500 1px;
+	border-radius: 3px;
+	text-align: center;
+	margin-bottom: 10px;
+}
+.error:before {
+	content: "⚠️ ";
+}
