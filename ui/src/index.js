@@ -33,6 +33,7 @@ app.get('/_info', catchErrors(async (req, res) => {
 		network_only: true,
 		title: "Creds",
 		show_on_homepage: true,
+		icon: "/icon.png",
 	});
 }));
 
