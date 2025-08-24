@@ -1,4 +1,102 @@
 body {
 	background: #ccc;
 	color: #000;
+	background-size: 100% 100%;
+	background-position: 0px 0px,0px 0px,0px 0px;
+	background-image:
+		repeating-linear-gradient(90deg, #FCF7FC77 0%, #D1C9D199 1%, #BFB3BF73 3%, #FCF7FC77 4%, #FCF7FC77 4%),
+		repeating-conic-gradient(from 0deg at 50% 50%, #F6E4F677 0%, #E0C5E077 1%, #8C698C77 3%, #F6E4F677 4%, #F6E4F677 5%),
+		radial-gradient(75% 75% at 50% 50%, #6A7FC4FF 0%, #08D8D8FF 85%);
+}
+main {
+	background: #cccccccc;
+	color: #000;
+	margin: 50px;
+	padding: 20px;
+	border: solid #555;
+	border-radius: 8px;
+	max-width: 400px;
+	margin: 0 auto;
+}
+h1 {
+	margin-top: 0;
+}
+.inline-form {
+	display: inline;
+}
+.inline-button {
+	color: #eee;
+	border-radius: 5px;
+}
+.add-button {
+	background: #260;
+	float: right;
+}
+.edit-button {
+	background: #06f;
+}
+.delete-button {
+	background: #b00;
+}
+.entry-form {
+	display: inline-block;
+}
+.entry-form .form-field {
+	display: block;
+	margin: 8px;
+}
+.entry-form .form-field label {
+	width: 105px;
+	display: inline-block;
+	font-weight: bold;
+}
+.entry-form .form-field input[type=text] {
+	min-width: 200px;
+}
+.entry-form .form-field input#key {
+	font-family: "Courier New", monospace;
+	text-transform: uppercase;
+}
+.key {
+	border: solid 1px #555;
+	font-family: "Courier New", monospace;
+	padding: 0px 3px;
+	background: #ffffdd77;
+}
+.system-name {
+	text-transform: capitalize
+}
+.environment-name {
+	font-weight: normal;
+	font-style: italic;
+	text-shadow: 0px 0px 4px #ffdd99;
+}
+.environment-production {
+	text-shadow: 0px 0px 2px #cc000099;
+}
+.environment-development {
+	text-shadow: 0px 0px 3px #0099cccc;
+}
+#credential-list li {
+	min-height: 30px;
+	font-size: 20px;
+}
+#credential-list li .inline-button {
+	font-size: 12px;
+	vertical-align: middle;
+	height: 23px;
+}
+.environment-list {
+	font-size: 18px;
+	list-style: square;
+}
+.environment-list li {
+	text-transform: capitalize;
+}
+.environment-list a {
+	color: inherit;
+	text-decoration: none;
+}
+.environment-list a:hover {
+	text-decoration: underline;
 }

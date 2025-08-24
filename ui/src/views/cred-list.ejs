@@ -7,35 +7,35 @@
 	<body>
 		<lucos-navbar>Credential List</lucos-navbar>
 		<a href="/">&lt;- Home</a>
-		<h1><%= system.replace("_", " ") %>: <%= environment %></h1>
-		<h2>Environment Variables Currently Set</h2>
-		<ul>
-			<% for(const key in creds) { %>
-			<li>
-				<%= key %>
-				<% if (creds[key].type == "simple") { %>
-					<form action="/update-simple-credential" method="get">
-						<input type="hidden" name="system" value="<%= system %>" />
-						<input type="hidden" name="environment" value="<%= environment %>" />
-						<input type="hidden" name="key" value="<%= key %>" />
-						<input type="submit" value="Edit" />
-					</form>
-					<form action="/delete-simple-credential" method="get">
-						<input type="hidden" name="system" value="<%= system %>" />
-						<input type="hidden" name="environment" value="<%= environment %>" />
-						<input type="hidden" name="key" value="<%= key %>" />
-						<input type="submit" value="Delete" />
-					</form>
+		<main>
+			<h1><span class="system-name"><%= system.replace("_", " ") %>:</span> <span class="environment-name environment-<%= environment %>"><%= environment %></span></h1>
+			<form action="/update-simple-credential" method="get" class="inline-form">
+				<input type="hidden" name="system" value="<%= system %>" />
+				<input type="hidden" name="environment" value="<%= environment %>" />
+				<input type="submit" title="Add Credential" value="＋" class="inline-button add-button" />
+			</form>
+			<ul id="credential-list">
+				<% for(const key in creds) { %>
+				<li>
+					<span class="key"><%= key %></span>
+					<% if (creds[key].type == "simple") { %>
+						<form action="/update-simple-credential" method="get" class="inline-form">
+							<input type="hidden" name="system" value="<%= system %>" />
+							<input type="hidden" name="environment" value="<%= environment %>" />
+							<input type="hidden" name="key" value="<%= key %>" />
+							<input type="submit" title="Edit Credential" value="✎" class="inline-button edit-button" />
+						</form>
+						<form action="/delete-simple-credential" method="get" class="inline-form">
+							<input type="hidden" name="system" value="<%= system %>" />
+							<input type="hidden" name="environment" value="<%= environment %>" />
+							<input type="hidden" name="key" value="<%= key %>" />
+							<input type="submit" title="Delete Credential" value="⛌" class="inline-button delete-button" />
+						</form>
+					<% } %>
+				</li>
 				<% } %>
-			(<%= creds[key].type %>)
-			</li>
-			<% } %>
-		</ul>
-		<form action="/update-simple-credential" method="get">
-			<input type="hidden" name="system" value="<%= system %>" />
-			<input type="hidden" name="environment" value="<%= environment %>" />
-			<input type="submit" value="Add New Credential" />
-		</form>
+			</ul>
+		</main>
 		<script type="text/javascript" src="/client.js"></script>
 	</body>
 </html>

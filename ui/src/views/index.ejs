@@ -6,22 +6,23 @@
 	</head>
 	<body>
 		<lucos-navbar>Credentials</lucos-navbar>
-			<form action="/update-simple-credential" method="get">
-				<input type="submit" value="Add Credential" />
+		<main>
+			<form action="/update-simple-credential" method="get" class="inline-form">
+				<input type="submit" title="Add Credential" value="＋" class="inline-button add-button" />
 			</form>
 			<% for(const systemid in systems) {
 				const system = systems[systemid];
 				%>
-				<h2><%= system.code.replace("_", " ") %></h2>
-				Environments:
-				<ul>
+				<h2 class="system-name"><%= system.code.replace("_", " ") %></h2>
+				<ul class="environment-list">
 					<% for(var ii = 0; ii < system.environments.length; ii++) {
 						const environment = system.environments[ii];
 						const path = `/system/${encodeURI(system.code)}/${encodeURI(environment)}`;%>
-					<li><a href="<%= path %>"><%= environment %></a></li>
+					<li class="environment-name environment-<%= environment %>"><a href="<%= path %>"><%= environment %></a></li>
 					<% } %>
 				</ul>
 			<%} %>
+		</main>
 		<script type="text/javascript" src="/client.js"></script>
 	</body>
 </html>
