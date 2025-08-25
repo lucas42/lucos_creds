@@ -31,7 +31,6 @@ h1 {
 }
 .add-button {
 	background: #260;
-	float: right;
 }
 .view-button {
 	background: #06f;
@@ -41,6 +40,16 @@ h1 {
 }
 .delete-button {
 	background: #b00;
+}
+.refresh-button {
+	background: #b0b;
+}
+.floating-button-set {
+	float: right;
+	display: inline-block;
+}
+.floating-button-set .inline-button {
+	height: 23px;
 }
 .entry-form {
 	display: inline-block;

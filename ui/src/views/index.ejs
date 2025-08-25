@@ -8,9 +8,14 @@
 	<body>
 		<lucos-navbar>Credentials</lucos-navbar>
 		<main>
-			<form action="/update-simple-credential" method="get" class="inline-form">
-				<input type="submit" title="Add Credential" value="＋" class="inline-button add-button" />
-			</form>
+			<div class="floating-button-set">
+				<form action="/update-simple-credential" method="get" class="inline-form">
+					<input type="submit" title="Add Simple Credential" value="＋" class="inline-button add-button" />
+				</form>
+				<form action="/update-linked-credential" method="get" class="inline-form">
+					<input type="submit" title="Add Linked Credential" value="∞" class="inline-button refresh-button" />
+				</form>
+			</div>
 			<% for(const systemid in systems) {
 				const system = systems[systemid];
 				%>
