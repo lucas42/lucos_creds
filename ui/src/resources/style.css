@@ -24,6 +24,13 @@ h1 {
 h3 {
 	margin: 5px 0;
 }
+a {
+	color: inherit;
+	text-decoration: none;
+}
+a:hover {
+	text-decoration: underline;
+}
 .inline-form {
 	display: inline;
 }
@@ -143,13 +150,6 @@ h3 {
 .environment-list li {
 	text-transform: capitalize;
 }
-.environment-list a {
-	color: inherit;
-	text-decoration: none;
-}
-.environment-list a:hover {
-	text-decoration: underline;
-}
 .error {
 	background: #900;
 	color: #fff;
@@ -163,11 +163,6 @@ h3 {
 	content: "⚠️ ";
 }
 a.floating-nav {
-	color: inherit;
-	text-decoration: none;
 	font-weight: bold;
 	text-shadow: 0 0 5px white;
-}
-a.floating-nav:hover {
-	text-decoration: underline;
 }
