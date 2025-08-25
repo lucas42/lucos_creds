@@ -21,6 +21,9 @@ main {
 h1 {
 	margin-top: 0;
 }
+h3 {
+	margin: 5px 0;
+}
 .inline-form {
 	display: inline;
 }
@@ -50,6 +53,9 @@ h1 {
 }
 .floating-button-set .inline-button {
 	height: 23px;
+}
+.button-set .inline-button {
+	height: 25px;
 }
 .entry-form {
 	display: inline-block;

@@ -9,13 +9,6 @@
 		<lucos-navbar><a href="/">Credential List</a></lucos-navbar>
 		<main>
 			<h1><span class="system-name"><%= system.replaceAll("_", " ") %>:</span> <span class="environment-name environment-<%= environment %>"><%= environment %></span></h1>
-			<div class="floating-button-set">
-				<form action="/update-simple-credential" method="get" class="inline-form">
-					<input type="hidden" name="system" value="<%= system %>" />
-					<input type="hidden" name="environment" value="<%= environment %>" />
-					<input type="submit" title="Add Credential" value="＋" class="inline-button add-button" />
-				</form>
-			</div>
 			<ul id="credential-list">
 				<% for(const key in creds) {
 					const viewpath = `/system/${encodeURI(system)}/${encodeURI(environment)}/${encodeURI(key)}`;
@@ -43,18 +36,37 @@
 							<input type="hidden" name="clientsystem" value="<%= system %>" />
 							<input type="hidden" name="clientenvironment" value="<%= environment %>" />
 							<input type="hidden" name="serversystem" value="<%= key.replace("KEY_", "").toLowerCase() %>" />
+							<!-- TODO: figure out the current serverenviornment -->
 							<input type="submit" title="Refresh Credential" value="♺" class="inline-button refresh-button" />
 						</form>
 					<% } else if (creds[key].type == "server") { %>
 						<form action="/update-linked-credential" method="get" class="inline-form">
 							<input type="hidden" name="serversystem" value="<%= system %>" />
 							<input type="hidden" name="serverenvironment" value="<%= environment %>" />
-							<input type="submit" title="Refresh Credential" value="♺" class="inline-button refresh-button" />
+							<input type="submit" title="Add Linked Credential where this system is the server" value="＋" class="inline-button add-button" />
 						</form>
 					<% } %>
 				</li>
 				<% } %>
 			</ul>
+			<h3>Add New Credential</h3>
+			<div class="button-set">
+				<form action="/update-simple-credential" method="get" class="inline-form">
+					<input type="hidden" name="system" value="<%= system %>" />
+					<input type="hidden" name="environment" value="<%= environment %>" />
+					<input type="submit" title="Add Simple Credential" value="＋ Simple" class="inline-button add-button" />
+				</form>
+				<form action="/update-linked-credential" method="get" class="inline-form">
+					<input type="hidden" name="clientsystem" value="<%= system %>" />
+					<input type="hidden" name="clientenvironment" value="<%= environment %>" />
+					<input type="submit" title="Add Linked Credential where this system is the client" value="＋ Client" class="inline-button add-button" />
+				</form>
+				<form action="/update-linked-credential" method="get" class="inline-form">
+					<input type="hidden" name="serversystem" value="<%= system %>" />
+					<input type="hidden" name="serverenvironment" value="<%= environment %>" />
+					<input type="submit" title="Add Linked Credential where this system is the server" value="＋ Server" class="inline-button add-button" />
+				</form>
+			</div>
 		</main>
 		<script type="text/javascript" src="/client.js"></script>
 	</body>
