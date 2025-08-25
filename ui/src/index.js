@@ -128,6 +128,46 @@ app.post('/delete-simple-credential', catchErrors(async (req, res) => {
 	res.redirect(303, `/system/${system}/${environment}`);
 }));
 
+
+app.get('/update-linked-credential', catchErrors(async (req, res) => {
+	const systemEnvironments = await getSystemEnvironments();
+	const systems = {};
+	const environments = {};
+	systemEnvironments.forEach(({system, environment}) => {
+		systems[system] = true;
+		environments[environment] = true;
+	});
+	let { clientsystem, clientenvironment, serversystem, serverenvironment, error } = req.query
+	if (!(clientsystem in systems)) clientsystem = null;
+	if (!(clientenvironment in environments)) clientenvironment = null;
+	if (!(serversystem in systems)) serversystem = null;
+	if (!(serverenvironment in environments)) serverenvironment = null;
+	const availableSystems = Object.keys(systems);
+	availableSystems.sort();
+	const availableEnvironments = Object.keys(environments);
+	availableSystems.sort();
+	res.render('update-linked-credential', {
+		availableSystems,
+		availableEnvironments,
+		clientsystem,
+		clientenvironment,
+		serversystem,
+		serverenvironment,
+		error,
+	});
+}));
+app.post('/update-linked-credential', catchErrors(async (req, res) => {
+	const { clientsystem, clientenvironment, serversystem, serverenvironment } = req.body;
+	if (!clientsystem || !clientenvironment || !serversystem || !serverenvironment) {
+		const params = new URLSearchParams(req.body);
+		params.append('error', "All fields are required");
+		res.redirect(303, '/update-linked-credential?'+params.toString());
+		return;
+	}
+	await sshExec(`${clientsystem}/${clientenvironment} => ${serversystem}/${serverenvironment}`);
+	res.redirect(303, `/system/${serversystem}/${serverenvironment}/CLIENT_KEYS`);
+}));
+
 app.listen(port, () => {
 	console.log(`UI listening on port ${port}`)
 });
@@ -158,7 +198,7 @@ async function getCredential(system, environment, key) {
 }
 
 async function sshExec(command) {
-	const output = await exec(`ssh -p 2202 lucos_creds ${command}`);
+	const output = await exec(`ssh -p 2202 lucos_creds \"${command}\"`);
 	return output.stdout;
 }
 

@@ -61,6 +61,9 @@ h1 {
 	font-family: "Courier New", monospace;
 	text-transform: uppercase;
 }
+.entry-form .form-field select {
+	min-width: 210px;
+}
 .view-field {
 	margin: 10px 0;
 	font-size: 20px;
@@ -99,10 +102,10 @@ h1 {
 	font-style: italic;
 	text-shadow: 0px 0px 4px #ffdd99;
 }
-.environment-production {
+.environment-production, select.environment-name:has(> option[value="production"]:checked) {
 	text-shadow: 0px 0px 2px #cc000099;
 }
-.environment-development {
+.environment-development, select.environment-name:has(> option[value="development"]:checked) {
 	text-shadow: 0px 0px 3px #0099cccc;
 }
 #credential-list li {
