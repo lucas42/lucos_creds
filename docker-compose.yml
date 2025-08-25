@@ -9,7 +9,7 @@ services:
       - "store:/var/lib/creds_store/"
     restart: always
     environment:
-      - LOGANNE_HOST=https://loganne.l42.eu
+      - LOGANNE_ENDPOINT
   lucos_creds_ui:
     build: ui
     container_name: lucos_creds_ui

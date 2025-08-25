@@ -53,7 +53,7 @@ func TestLoganneEvent(test *testing.T) {
 	}
 	go loganneServer.Serve(listener)
 	loganne := Loganne{
-		host: "http://localhost:7999",
+		endpoint: "http://localhost:7999/events",
 		source: "creds_test",
 	}
 	loganne.postCredentialUpdated("test_system", "testing", "SPECIAL_URL")

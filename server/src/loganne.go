@@ -15,15 +15,14 @@ type LoganneInterface interface {
 
 type Loganne struct {
 	source string
-	host   string
+	endpoint   string
 }
 
 func (loganne Loganne) post(eventType string, humanReadable string, credential NormalisedCredential) {
-	url := loganne.host + "/events"
 
 	// Clear the value in the credential to ensure it doesn't get logged
 	credential.Value = ""
-	slog.Debug("Posting to loganne", "eventType", eventType, "humanReadable", humanReadable, "url", url, "credential", credential)
+	slog.Debug("Posting to loganne", "eventType", eventType, "humanReadable", humanReadable, "url", loganne.endpoint, "credential", credential)
 
 	data := map[string]interface{}{
 		"source":  loganne.source,
@@ -33,7 +32,7 @@ func (loganne Loganne) post(eventType string, humanReadable string, credential N
 	}
 
 	postData, _ := json.Marshal(data)
-	_, err := http.Post(url, "application/json", bytes.NewBuffer(postData))
+	_, err := http.Post(loganne.endpoint, "application/json", bytes.NewBuffer(postData))
 	if err != nil {
 		slog.Warn("Error occured whilst posting to Loganne", slog.Any("error", err))
 	}
