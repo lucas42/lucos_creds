@@ -22,6 +22,7 @@ func main() {
 	loganne := Loganne{
 		endpoint: os.Getenv("LOGANNE_ENDPOINT"),
 		source: "lucos_creds",
+		ui_domain: os.Getenv("UI_DOMAIN"),
 	}
 	done, _ := startSftpServer(
 		port,

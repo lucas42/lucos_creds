@@ -53,8 +53,9 @@ func TestLoganneEvent(test *testing.T) {
 	}
 	go loganneServer.Serve(listener)
 	loganne := Loganne{
-		endpoint: "http://localhost:7999/events",
-		source: "creds_test",
+		endpoint:  "http://localhost:7999/events",
+		source:    "creds_test",
+		ui_domain: "http://127.0.0.1",
 	}
 	loganne.postCredentialUpdated("test_system", "testing", "SPECIAL_URL")
 
@@ -62,7 +63,7 @@ func TestLoganneEvent(test *testing.T) {
 	assertEqual(test,"Loganne request wasn't POST request", "POST", latestRequest.Method)
 
 	assertNoError(test, latestRequestError)
-	assertEqual(test, "Unexpected request body", `{"credential":{"system":"test_system","environment":"testing","key":"SPECIAL_URL"},"humanReadable":"Credential SPECIAL_URL updated in test_system (testing)","source":"creds_test","type":"credentialUpdated"}`, latestRequestBody)
+	assertEqual(test, "Unexpected request body", `{"credential":{"system":"test_system","environment":"testing","key":"SPECIAL_URL"},"humanReadable":"Credential SPECIAL_URL updated in test_system (testing)","source":"creds_test","type":"credentialUpdated","url":"http://127.0.0.1/system/test_system/testing/SPECIAL_URL"}`, latestRequestBody)
 
 	loganne.postCredentialDeleted("test_system", "staging", "SPECIAL_CODE")
 

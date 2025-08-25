@@ -10,6 +10,7 @@ services:
     restart: always
     environment:
       - LOGANNE_ENDPOINT
+      - UI_DOMAIN
   lucos_creds_ui:
     build: ui
     container_name: lucos_creds_ui
