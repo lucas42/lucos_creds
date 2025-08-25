@@ -6,7 +6,12 @@
 		<link rel="icon" href="/icon.png" />
 	</head>
 	<body>
-		<lucos-navbar><a href="/">Credential List</a></lucos-navbar>
+		<lucos-navbar bg-colour="#334">Creds</lucos-navbar>
+		<nav id="breadcrumbs">
+			<a href="/">Credentials</a> &gt;
+			<a href="/system/<%=encodeURI(system)%>"><%= system.replaceAll("_"," ") %></a> &gt;
+			<span><%= environment %></span>
+		</nav>
 		<main>
 			<h1><span class="system-name"><%= system.replaceAll("_", " ") %>:</span> <span class="environment-name environment-<%= environment %>"><%= environment %></span></h1>
 			<ul id="credential-list">

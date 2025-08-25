@@ -1,0 +1,41 @@
+<html>
+	<head>
+		<title>LucOs Credentials</title>
+		<meta name="viewport" content="initial-scale=1.0, user-scalable=no, width=device-width" />
+		<link href="/style.css" rel="stylesheet" />
+		<link rel="icon" href="/icon.png" />
+	</head>
+	<body>
+		<lucos-navbar bg-colour="#334">Creds</lucos-navbar>
+		<nav id="breadcrumbs">
+			<a href="/">Credentials</a> &gt; 
+			<span><%= system.replaceAll("_"," ") %></span>
+		</nav>
+		<main>
+			<h2 class="system-name"><%= system.replaceAll("_", " ") %></h2>
+			<ul class="environment-list">
+				<% for(var ii = 0; ii < environments.length; ii++) {
+					const environment = environments[ii];
+					const path = `/system/${encodeURI(system)}/${encodeURI(environment)}`;%>
+				<li class="environment-name environment-<%= environment %>"><a href="<%= path %>"><%= environment %></a></li>
+				<% } %>
+			</ul>
+			<h3>Add New Credential</h3>
+			<div class="button-set">
+				<form action="/update-simple-credential" method="get" class="inline-form">
+					<input type="hidden" name="system" value="<%= system %>" />
+					<input type="submit" title="Add Simple Credential" value="＋ Simple" class="inline-button add-button" />
+				</form>
+				<form action="/update-linked-credential" method="get" class="inline-form">
+					<input type="hidden" name="clientsystem" value="<%= system %>" />
+					<input type="submit" title="Add Linked Credential where this system is the client" value="＋ Client" class="inline-button add-button" />
+				</form>
+				<form action="/update-linked-credential" method="get" class="inline-form">
+					<input type="hidden" name="serversystem" value="<%= system %>" />
+					<input type="submit" title="Add Linked Credential where this system is the server" value="＋ Server" class="inline-button add-button" />
+				</form>
+			</div>
+		</main>
+		<script type="text/javascript" src="/client.js"></script>
+	</body>
+</html>

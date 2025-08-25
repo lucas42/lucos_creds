@@ -52,6 +52,24 @@ app.get('/', catchErrors(async (req, res) => {
 	res.render('index', {systems});
 }));
 
+app.get('/system', (req, res) => {
+	res.redirect(301, '/');
+});
+
+app.get('/system/:system', catchErrors(async (req, res) => {
+	const systemEnvironments = await getSystemEnvironments();
+	const system = req.params.system;
+	const environments = [];
+	systemEnvironments.forEach(item => {
+		if (item.system != system) return;
+		environments.push(item.environment);
+	});
+	res.render('system', {
+		system,
+		environments,
+	});
+}));
+
 app.get('/system/:system/:environment', catchErrors(async (req, res) => {
 	const creds = await getCredList(req.params.system, req.params.environment);
 	res.render('cred-list', {

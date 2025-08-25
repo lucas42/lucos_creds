@@ -6,7 +6,10 @@
 		<link rel="icon" href="/icon.png" />
 	</head>
 	<body>
-		<lucos-navbar>Credentials</lucos-navbar>
+		<lucos-navbar bg-colour="#334">Creds</lucos-navbar>
+		<nav id="breadcrumbs">
+			<span>Credentials</a>
+		</nav>
 		<main>
 			<div class="floating-button-set">
 				<form action="/update-simple-credential" method="get" class="inline-form">
@@ -19,7 +22,7 @@
 			<% for(const systemid in systems) {
 				const system = systems[systemid];
 				%>
-				<h2 class="system-name"><%= system.code.replaceAll("_", " ") %></h2>
+				<h2 class="system-name"><a href="/system/<%=encodeURI(system.code)%>"><%= system.code.replaceAll("_", " ") %></a></h2>
 				<ul class="environment-list">
 					<% for(var ii = 0; ii < system.environments.length; ii++) {
 						const environment = system.environments[ii];
