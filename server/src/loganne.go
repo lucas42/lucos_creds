@@ -41,11 +41,13 @@ func (loganne Loganne) post(eventType string, humanReadable string, credential N
 	response, err := http.Post(loganne.endpoint, "application/json", bytes.NewBuffer(postData))
 	if err != nil {
 		slog.Warn("Error occured whilst posting to Loganne", slog.Any("error", err))
+		return
 	}
 	if response.StatusCode != http.StatusAccepted {
 		defer response.Body.Close()
 		body, _ := io.ReadAll(response.Body)
 		slog.Warn("Unexpected status code returned by Loganne", "statusCode", response.StatusCode, "body", string(body))
+		return
 	}
 }
 
