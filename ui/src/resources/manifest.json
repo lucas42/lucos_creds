@@ -1,0 +1,23 @@
+{
+	"name": "lucOS Creds",
+	"short_name": "Creds",
+	"start_url": "/",
+	"scope": "/",
+	"display": "standalone",
+	"theme_color": "#334",
+	"background_color": "#a3c7d5",
+	"icons":[
+		{
+			"src": "/icon.png",
+			"sizes": "192x192",
+			"type": "image/png",
+			"purpose": "any"
+		},
+		{
+			"src": "/maskable_icon.png",
+			"sizes": "133x133",
+			"type": "image/png",
+			"purpose": "maskable"
+		}
+	]
+}
