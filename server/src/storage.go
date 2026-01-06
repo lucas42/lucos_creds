@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"github.com/jmoiron/sqlx"
+	"slices"
 	"strings"
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -190,8 +191,16 @@ func (datastore Datastore) getSimpleCredentialsBySystemEnvironment(system string
 		if err != nil {
 			slog.Warn("Failed to decrypt", "key", credential.Key, slog.Any("error", err))
 		}
+		cred_type := "simple"
+
+		// Config credentials are stored as simple credentials and identified by belonging to a known list of keys
+		// This approach allows these values to be updated automatically, but instructs the UI to hide the edit button.
+		config_keys := []string{"PORT"}
+		if slices.Contains(config_keys, credential.Key) {
+			cred_type = "config"
+		}
 		normalisedCredentials = append(normalisedCredentials, NormalisedCredential{
-			Type: "simple",
+			Type: cred_type,
 			System: credential.System,
 			Environment: credential.Environment,
 			Key: credential.Key,

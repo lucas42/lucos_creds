@@ -276,6 +276,12 @@ func TestCreateSimpleCredentialOverSSH(test *testing.T) {
 	assertSshCommandReturnsOutput(test, "lucos_test/production/COMPLEX_KEY=---BEGIN KEY---\nabc12523===\n---END KEY---\n", "") // Include value with equal signs in to ensure they get parsed properly
 	assertScpCommandReturnsContent(test, "lucos_test/production/.env", "BORING_KEY=\"lilac\"\nCOMPLEX_KEY=\"---BEGIN KEY---\nabc12523===\n---END KEY---\n\"\nENVIRONMENT=\"production\"\n")
 }
+func TestCreateConfigCredentialOverSSH(test *testing.T) {
+	defer startTestServer(test)()
+
+	assertSshCommandReturnsOutput(test, "lucos_test/production/PORT=1234", "")
+	assertScpCommandReturnsContent(test, "lucos_test/production/.env", "ENVIRONMENT=\"production\"\nPORT=\"1234\"\n")
+}
 func TestCreateLinkedCredentialOverSSH(test *testing.T) {
 	defer startTestServer(test)()
 
@@ -319,10 +325,12 @@ func TestLsOverSSH(test *testing.T) {
 	defer startTestServer(test)()
 
 	assertSshCommandReturnsOutput(test, "lucos_test/production/SINGLE_KEY=lilac", "")
+	assertSshCommandReturnsOutput(test, "lucos_test/production/PORT=1234", "")
 	assertSshCommandReturnsOutput(test, "ls", "[{\"system\":\"lucos_test\",\"environment\":\"production\"}]\n")
-	assertSshCommandReturnsOutput(test, "ls lucos_test/production", "{\"ENVIRONMENT\":{\"system\":\"lucos_test\",\"environment\":\"production\",\"key\":\"ENVIRONMENT\",\"type\":\"built-in\"},\"SINGLE_KEY\":{\"system\":\"lucos_test\",\"environment\":\"production\",\"key\":\"SINGLE_KEY\",\"type\":\"simple\"}}\n")
+	assertSshCommandReturnsOutput(test, "ls lucos_test/production", "{\"ENVIRONMENT\":{\"system\":\"lucos_test\",\"environment\":\"production\",\"key\":\"ENVIRONMENT\",\"type\":\"built-in\"},\"PORT\":{\"system\":\"lucos_test\",\"environment\":\"production\",\"key\":\"PORT\",\"type\":\"config\"},\"SINGLE_KEY\":{\"system\":\"lucos_test\",\"environment\":\"production\",\"key\":\"SINGLE_KEY\",\"type\":\"simple\"}}\n")
 
 	assertSshCommandReturnsOutput(test, "ls lucos_test/production/Single_key", "{\"system\":\"lucos_test\",\"environment\":\"production\",\"key\":\"SINGLE_KEY\",\"type\":\"simple\",\"value\":\"lilac\"}\n")
+	assertSshCommandReturnsOutput(test, "ls lucos_test/production/POrT", "{\"system\":\"lucos_test\",\"environment\":\"production\",\"key\":\"PORT\",\"type\":\"config\",\"value\":\"1234\"}\n")
 	assertSshCommandReturnsError(test, "ls lucos_test/production/UNKnoWN_KEY", StatusNotFound, "Can't find credential with key `UNKNOWN_KEY`\n")
 }
 func TestSyntaxErrors(test *testing.T) {

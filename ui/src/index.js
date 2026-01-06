@@ -91,6 +91,7 @@ app.get('/update-simple-credential', catchErrors(async (req, res) => {
 	if (req.query.system && req.query.environment && req.query.key) {
 		try {
 			({ system, environment, key, value, type } = await getCredential(system, environment, key));
+			if (type == "config" && !error) error = `Warning: Updates to this credential may later get automatically overwritten`;
 			if (type != "simple" && !error) error = `Warning: Can't update ${type} credentials`;
 		} catch {}
 	}
