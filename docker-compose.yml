@@ -11,6 +11,17 @@ services:
     environment:
       - LOGANNE_ENDPOINT
       - UI_DOMAIN
+  lucos_creds_configy_sync:
+    build: configy_sync
+    container_name: lucos_creds_configy_sync
+    image: lucas42/lucos_creds_configy_sync
+    restart: always
+    environment:
+      - SCHEDULE_TRACKER_ENDPOINT
+      - CONFIGY_SYNC_PRIVATE_SSH_KEY
+    depends_on:
+      lucos_creds:
+        condition: service_started
   lucos_creds_ui:
     build: ui
     container_name: lucos_creds_ui
