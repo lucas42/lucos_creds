@@ -187,3 +187,18 @@ a.floating-nav {
 	font-weight: bold;
 	text-shadow: 0 0 5px white;
 }
+
+.copy-button {
+	border: none;
+	background: none;
+	cursor: pointer;
+	transition: transform 2s ease-out;
+	vertical-align: text-bottom;
+}
+.copy-button:not(:hover) {
+	filter: grayscale(1);
+}
+.copy-button[data-copied] {
+	transform: scale(5);
+	transition: none;
+}
