@@ -17,7 +17,7 @@ session.headers.update({
 
 def sshExec(command):
 	try:
-		output = subprocess.run([f"ssh -p 2202 lucos_creds \"{command}\""], shell=True, check=True, timeout=1, text=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
+		output = subprocess.run([f"ssh -p 2202 lucos_creds \"{command.replace('"','\\"')}\""], shell=True, check=True, timeout=1, text=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
 		return output.stdout
 	except subprocess.CalledProcessError as e:
 		if e.returncode == 3:
