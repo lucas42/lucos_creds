@@ -195,7 +195,7 @@ func (datastore Datastore) getSimpleCredentialsBySystemEnvironment(system string
 
 		// Config credentials are stored as simple credentials and identified by belonging to a known list of keys
 		// This approach allows these values to be updated automatically, but instructs the UI to hide the edit button.
-		config_keys := []string{"PORT"}
+		config_keys := []string{"PORT", "APP_ORIGIN"}
 		if slices.Contains(config_keys, credential.Key) {
 			cred_type = "config"
 		}

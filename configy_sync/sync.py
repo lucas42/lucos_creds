@@ -61,6 +61,12 @@ if __name__ == "__main__":
 		for system in systems:
 			for environment in ["development", "production"]:
 				updateCredential(system['id'], environment, "PORT", system['http_port'])
+			if system['domain'] and system['http_port']:
+				updateCredential(system['id'], 'development', 'APP_ORIGIN', f"http://localhost:{system['http_port']}")
+				updateCredential(system['id'], 'production', 'APP_ORIGIN', f"https://{system['domain']}")
+			else:
+				updateCredential(system['id'], 'development', 'APP_ORIGIN', None)
+				updateCredential(system['id'], 'production', 'APP_ORIGIN', None)
 
 		# Schedule tracker success
 		session.post(
