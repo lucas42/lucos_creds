@@ -80,8 +80,16 @@ app.get('/system/:system/:environment', catchErrors(async (req, res) => {
 }));
 
 app.get('/system/:system/:environment/:key', catchErrors(async (req, res) => {
-	const credential = await getCredential(req.params.system, req.params.environment, req.params.key);
-	res.render('view-credential', credential);
+	try {
+		const credential = await getCredential(req.params.system, req.params.environment, req.params.key);
+		res.render('view-credential', credential);
+	} catch (error) {
+		if (error.code == 3) { // Returned by server for StatusNotFound
+			res.status(404).send(error.stdout)
+			return
+		}
+		throw error
+	}
 }));
 
 app.get('/update-simple-credential', catchErrors(async (req, res) => {
