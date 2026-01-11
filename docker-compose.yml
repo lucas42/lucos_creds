@@ -10,7 +10,7 @@ services:
     restart: always
     environment:
       - LOGANNE_ENDPOINT
-      - UI_DOMAIN
+      - APP_ORIGIN
   lucos_creds_configy_sync:
     build: configy_sync
     container_name: lucos_creds_configy_sync
