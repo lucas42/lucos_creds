@@ -26,11 +26,11 @@ services:
     build: ui
     container_name: lucos_creds_ui
     ports:
-      - "8031:8031"
+      - $PORT:$PORT
     image: lucas42/lucos_creds_ui
     restart: always
     environment:
-      - PORT=8031
+      - PORT
       - UI_PRIVATE_SSH_KEY
 
 volumes:
