@@ -82,9 +82,13 @@ func assertCommandOutput(test *testing.T, cmd *exec.Cmd, expected_exitcode int, 
 	if (expected_exitcode == StatusOk) {
 		assertNoError(test, err)
 	} else {
-		assertNotEqual(test, "Command didn't return an error", nil, err)
-		exitError, _ := err.(*exec.ExitError)
-		assertEqual(test, "Unexpected exit code from command", expected_exitcode, exitError.ExitCode())
+		if err == nil {
+			test.Errorf("Command didn't return an error")
+		}
+		exitError, ok := err.(*exec.ExitError)
+		if ok && expected_exitcode != exitError.ExitCode() {
+			test.Errorf("Unexpected exit code from command. Expected: %d, Actual: %d.", expected_exitcode, exitError.ExitCode())
+		}
 	}
 	assertEqual(test, "Unexpected stdout from command", expected_stdout, string(stdout_output))
 	assertEqual(test, "Unexpected stderr from command", expected_stderr, string(stderr_output))
@@ -164,7 +168,7 @@ func TestWriteReadEnvFile(test *testing.T) {
 
 	assertSshCommandReturnsOutput(test, "lucos_test/production/BORING_KEY=yellow", "")
 	assertSshCommandReturnsOutput(test, "lucos_test/production/OTHERKEY=green", "")
-	assertScpCommandReturnsContent(test, "lucos_test/production/.env", "BORING_KEY=\"yellow\"\nENVIRONMENT=\"production\"\nOTHERKEY=\"green\"\n")
+	assertScpCommandReturnsContent(test, "lucos_test/production/.env", "BORING_KEY=\"yellow\"\nENVIRONMENT=\"production\"\nOTHERKEY=\"green\"\nSYSTEM=\"lucos_test\"\n")
 
 }
 // Requests a file which isn't available on the server
@@ -267,20 +271,20 @@ func TestStatePersistsRestart(test *testing.T) {
 	defer closeSecondServer()
 
 	assertSshCommandReturnsOutput(test, "lucos_test/production/OTHERKEY=green", "")
-	assertScpCommandReturnsContent(test, "lucos_test/production/.env", "BORING_KEY=\"yellow\"\nENVIRONMENT=\"production\"\nOTHERKEY=\"green\"\n")
+	assertScpCommandReturnsContent(test, "lucos_test/production/.env", "BORING_KEY=\"yellow\"\nENVIRONMENT=\"production\"\nOTHERKEY=\"green\"\nSYSTEM=\"lucos_test\"\n")
 }
 func TestCreateSimpleCredentialOverSSH(test *testing.T) {
 	defer startTestServer(test)()
 
 	assertSshCommandReturnsOutput(test, "lucos_test/production/BORING_KEY=lilac", "")
 	assertSshCommandReturnsOutput(test, "lucos_test/production/COMPLEX_KEY=---BEGIN KEY---\nabc12523===\n---END KEY---\n", "") // Include value with equal signs in to ensure they get parsed properly
-	assertScpCommandReturnsContent(test, "lucos_test/production/.env", "BORING_KEY=\"lilac\"\nCOMPLEX_KEY=\"---BEGIN KEY---\nabc12523===\n---END KEY---\n\"\nENVIRONMENT=\"production\"\n")
+	assertScpCommandReturnsContent(test, "lucos_test/production/.env", "BORING_KEY=\"lilac\"\nCOMPLEX_KEY=\"---BEGIN KEY---\nabc12523===\n---END KEY---\n\"\nENVIRONMENT=\"production\"\nSYSTEM=\"lucos_test\"\n")
 }
 func TestCreateConfigCredentialOverSSH(test *testing.T) {
 	defer startTestServer(test)()
 
 	assertSshCommandReturnsOutput(test, "lucos_test/production/PORT=1234", "")
-	assertScpCommandReturnsContent(test, "lucos_test/production/.env", "ENVIRONMENT=\"production\"\nPORT=\"1234\"\n")
+	assertScpCommandReturnsContent(test, "lucos_test/production/.env", "ENVIRONMENT=\"production\"\nPORT=\"1234\"\nSYSTEM=\"lucos_test\"\n")
 }
 func TestCreateLinkedCredentialOverSSH(test *testing.T) {
 	defer startTestServer(test)()
@@ -311,14 +315,14 @@ func TestCreateLinkedCredentialOverSSH(test *testing.T) {
 	assertEqual(test, "Linked Credential not set properly for client", "KEY_LUCOS_TEST_SERVER", keyvalueparts[0])
 	sharedCredential := strings.Trim(keyvalueparts[1], "\"")
 
-	assertScpCommandReturnsContent(test, "lucos_test_server/production/.env", "CLIENT_KEYS=\"lucos_test_client:production="+sharedCredential+"\"\nENVIRONMENT=\"production\"\nOTHERKEY=\"green\"\n")
+	assertScpCommandReturnsContent(test, "lucos_test_server/production/.env", "CLIENT_KEYS=\"lucos_test_client:production="+sharedCredential+"\"\nENVIRONMENT=\"production\"\nOTHERKEY=\"green\"\nSYSTEM=\"lucos_test_server\"\n")
 }
 func TestDeleteCredentialOverSSH(test *testing.T) {
 	defer startTestServer(test)()
 
 	assertSshCommandReturnsOutput(test, "lucos_test_server/staging/SPECIAL=green", "")
 	assertSshCommandReturnsOutput(test, "lucos_test_server/staging/SPECIAL=", "")
-	assertScpCommandReturnsContent(test, "lucos_test_server/staging/.env", "ENVIRONMENT=\"staging\"\n")
+	assertScpCommandReturnsContent(test, "lucos_test_server/staging/.env", "ENVIRONMENT=\"staging\"\nSYSTEM=\"lucos_test_server\"\n")
 
 }
 func TestLsOverSSH(test *testing.T) {
@@ -327,7 +331,7 @@ func TestLsOverSSH(test *testing.T) {
 	assertSshCommandReturnsOutput(test, "lucos_test/production/SINGLE_KEY=lilac", "")
 	assertSshCommandReturnsOutput(test, "lucos_test/production/PORT=1234", "")
 	assertSshCommandReturnsOutput(test, "ls", "[{\"system\":\"lucos_test\",\"environment\":\"production\"}]\n")
-	assertSshCommandReturnsOutput(test, "ls lucos_test/production", "{\"ENVIRONMENT\":{\"system\":\"lucos_test\",\"environment\":\"production\",\"key\":\"ENVIRONMENT\",\"type\":\"built-in\"},\"PORT\":{\"system\":\"lucos_test\",\"environment\":\"production\",\"key\":\"PORT\",\"type\":\"config\"},\"SINGLE_KEY\":{\"system\":\"lucos_test\",\"environment\":\"production\",\"key\":\"SINGLE_KEY\",\"type\":\"simple\"}}\n")
+	assertSshCommandReturnsOutput(test, "ls lucos_test/production", "{\"ENVIRONMENT\":{\"system\":\"lucos_test\",\"environment\":\"production\",\"key\":\"ENVIRONMENT\",\"type\":\"built-in\"},\"PORT\":{\"system\":\"lucos_test\",\"environment\":\"production\",\"key\":\"PORT\",\"type\":\"config\"},\"SINGLE_KEY\":{\"system\":\"lucos_test\",\"environment\":\"production\",\"key\":\"SINGLE_KEY\",\"type\":\"simple\"},\"SYSTEM\":{\"system\":\"lucos_test\",\"environment\":\"production\",\"key\":\"SYSTEM\",\"type\":\"built-in\"}}\n")
 
 	assertSshCommandReturnsOutput(test, "ls lucos_test/production/Single_key", "{\"system\":\"lucos_test\",\"environment\":\"production\",\"key\":\"SINGLE_KEY\",\"type\":\"simple\",\"value\":\"lilac\"}\n")
 	assertSshCommandReturnsOutput(test, "ls lucos_test/production/POrT", "{\"system\":\"lucos_test\",\"environment\":\"production\",\"key\":\"PORT\",\"type\":\"config\",\"value\":\"1234\"}\n")
@@ -349,11 +353,13 @@ func TestValidationErrors(test *testing.T) {
 	// Update Simple Credentials
 	assertSshCommandReturnsError(test, "lucos_test/production/ENVIRONMENT=staging", StatusValidationError, "Validation Error: ENVIRONMENT is a reserved key\n")
 	assertSshCommandReturnsError(test, "lucos_test/production/CLIENT_KEYS=123abc", StatusValidationError, "Validation Error: CLIENT_KEYS is a reserved key\n")
+	assertSshCommandReturnsError(test, "lucos_test/production/SYSTEM=lucos_test", StatusValidationError, "Validation Error: SYSTEM is a reserved key\n")
 	assertSshCommandReturnsError(test, "lucos_test/production/KEY_LUCOS_TEST_CLIENT=789xyz", StatusValidationError, "Validation Error: keys beginning KEY_ are reserved\n")
 
 	// Delete Simple Credentials
 	assertSshCommandReturnsError(test, "lucos_test/production/ENVIRONMENT=", StatusValidationError, "Validation Error: ENVIRONMENT is a reserved key\n")
 	assertSshCommandReturnsError(test, "lucos_test/production/CLIENT_KEYS=", StatusValidationError, "Validation Error: CLIENT_KEYS is a reserved key\n")
+	assertSshCommandReturnsError(test, "lucos_test/production/SYSTEM=", StatusValidationError, "Validation Error: SYSTEM is a reserved key\n")
 	assertSshCommandReturnsError(test, "lucos_test/production/KEY_LUCOS_TEST_CLIENT=", StatusValidationError, "Validation Error: keys beginning KEY_ are reserved\n")
 
 }

@@ -12,7 +12,7 @@ func TestKeysNormalisedToUppercase(test *testing.T) {
 	datastore := initDatastore(datastorePath, dataKeyPath, MockLoganne{})
 	datastore.updateCredential("lucos_test", "testing", "SPECIAL_KEY", "avocado")
 	datastore.updateCredential("lucos_test", "testing", "Special_Key", "banana")
-	expected := map[string]string { "SPECIAL_KEY": "banana", "ENVIRONMENT": "testing" }
+	expected := map[string]string { "SPECIAL_KEY": "banana", "ENVIRONMENT": "testing", "SYSTEM": "lucos_test" }
 	actual, err := datastore.getAllCredentialsBySystemEnvironment("lucos_test", "testing")
 	assertNoError(test, err)
 	assertEqual(test, "Credential keys not normalised to Uppercase", expected, actual)
@@ -124,7 +124,7 @@ func TestUpdatingLinkToDifferentEnv(test *testing.T) {
 
 	serverCreds, err := datastore.getAllCredentialsBySystemEnvironment("lucos_test_server", "testing")
 	assertNoError(test, err)
-	assertEqual(test, "Expected no credentials for server in old environment", map[string]string{"ENVIRONMENT": "testing"}, serverCreds)
+	assertEqual(test, "Expected no credentials for server in old environment", map[string]string{"ENVIRONMENT": "testing", "SYSTEM": "lucos_test_server"}, serverCreds)
 	serverCreds, err = datastore.getAllCredentialsBySystemEnvironment("lucos_test_server", "staging")
 	assertNoError(test, err)
 	expected := "lucos_test_client:testing="+secondClientKey

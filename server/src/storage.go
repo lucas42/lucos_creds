@@ -269,9 +269,30 @@ func (datastore Datastore) getBuiltInCredentialsBySystemEnvironment(system strin
 		Type: "built-in",
 		System: system,
 		Environment: environment,
+		Key: "SYSTEM",
+		Value: system,
+	})
+	normalisedCredentials = append(normalisedCredentials, NormalisedCredential{
+		Type: "built-in",
+		System: system,
+		Environment: environment,
 		Key: "ENVIRONMENT",
 		Value: environment,
 	})
+	return
+}
+
+// Converts a given key to a normalised uppercase and checks against formats which aren't allowed modification - returning a ValidationError if it matches
+func normaliseCredentialKey(key string) (normalisedKey string, validationError error) {
+	normalisedKey = strings.ToUpper(key) // Normalise all keys to only be uppercase
+	if (normalisedKey == "CLIENT_KEYS" || normalisedKey == "ENVIRONMENT" || normalisedKey == "SYSTEM") {
+		validationError = &ValidationError{normalisedKey+" is a reserved key"}
+		return
+	}
+	if (strings.HasPrefix(normalisedKey, "KEY_")) {
+		validationError = &ValidationError{"keys beginning KEY_ are reserved"}
+		return
+	}
 	return
 }
 
@@ -279,16 +300,11 @@ func (datastore Datastore) updateCredential(system string, environment string, k
 	credential := SimpleCredential{}
 	credential.System = system
 	credential.Environment = environment
-	credential.Key = strings.ToUpper(key) // Normalise all keys to only be uppercase
-	if (credential.Key == "CLIENT_KEYS" || credential.Key == "ENVIRONMENT") {
-		err = &ValidationError{credential.Key+" is a reserved key"}
-		return
-	}
-	if (strings.HasPrefix(credential.Key, "KEY_")) {
-		err = &ValidationError{"keys beginning KEY_ are reserved"}
-		return
-	}
 	credential.PlainValue = rawValue
+	credential.Key, err = normaliseCredentialKey(key)
+	if err != nil {
+		return
+	}
 	err = credential.encrypt(datastore.dataBlockCipher)
 	if err != nil {
 		return
@@ -328,16 +344,10 @@ func (datastore Datastore) deleteCredential(system string, environment string, k
 	credential := SimpleCredential{}
 	credential.System = system
 	credential.Environment = environment
-	credential.Key = strings.ToUpper(key) // Normalise all keys to only be uppercase
-	if (credential.Key == "CLIENT_KEYS" || credential.Key == "ENVIRONMENT") {
-		err = &ValidationError{credential.Key+" is a reserved key"}
+	credential.Key, err = normaliseCredentialKey(key)
+	if err != nil {
 		return
 	}
-	if (strings.HasPrefix(credential.Key, "KEY_")) {
-		err = &ValidationError{"keys beginning KEY_ are reserved"}
-		return
-	}
-
 	_, err = datastore.db.NamedExec("DELETE FROM credential WHERE system = :system AND environment = :environment AND key = :key", credential)
 	if err != nil {
 		return
