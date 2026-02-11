@@ -1,4 +1,4 @@
-FROM golang:1.26rc3 AS builder
+FROM golang:1.26 AS builder
 
 WORKDIR /go/src/lucos_creds
 
