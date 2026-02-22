@@ -5,7 +5,7 @@ A credential manager for lucos systems
 ## Dependencies
 
 * docker
-* docker-compose
+* docker compose
 
 ## Build-time Dependencies
 
