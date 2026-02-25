@@ -16,5 +16,11 @@
     "folder-hash": "^4.1.1",
     "lucos_navbar": "^2.1.2",
     "webpack-cli": "^6.0.1"
+  },
+  "overrides": {
+    "folder-hash": {
+      "minimatch": "^7.4.7"
+    },
+    "minimatch": "^5.1.7"
   }
 }
