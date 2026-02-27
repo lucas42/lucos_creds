@@ -24,12 +24,13 @@ func main() {
 		source: "lucos_creds",
 		ui_domain: os.Getenv("APP_ORIGIN"),
 	}
+	authorizedKeys, userPermissions := parseAuthorizedKeys("authorized_keys")
 	done, _ := startSftpServer(
 		port,
 		getCreateSshSigner("/var/lib/creds_store/server_key"),
 		initDatastore("/var/lib/creds_store/creds.sqlite", "/var/lib/creds_store/data_key", loganne),
-		parseAuthorizedKeys("authorized_keys"),
-		parseUserPermissions(),
+		authorizedKeys,
+		userPermissions,
 	)
 	<- done()
 }

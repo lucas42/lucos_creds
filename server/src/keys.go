@@ -122,9 +122,11 @@ func getCreateBlockCipher(keyPath string) (cipher.AEAD) {
 /**
  * Parses a file of public keys in the format of OpenSSH's authorized_keys file
  * Treats the "comment" as the username which that public key is valid for
+ * Also parses key options to build per-user permissions (e.g. restrict-environment="development")
  */
-func parseAuthorizedKeys(filePath string) (map[string]ssh.PublicKey) {
+func parseAuthorizedKeys(filePath string) (map[string]ssh.PublicKey, map[string]ssh.Permissions) {
 	keyMap := map[string]ssh.PublicKey{}
+	permissionsMap := map[string]ssh.Permissions{}
 	fileBytes, err := os.ReadFile(filePath)
 	if err != nil {
 		slog.Error("Failed to read authorized_keys", slog.Any("error", err))
@@ -135,21 +137,22 @@ func parseAuthorizedKeys(filePath string) (map[string]ssh.PublicKey) {
 		if line == "" {
 			continue
 		}
-		parsedKey, user, _, _, err := ssh.ParseAuthorizedKey([]byte(line))
+		parsedKey, user, options, _, err := ssh.ParseAuthorizedKey([]byte(line))
 		if err != nil {
 			slog.Error("Failed to parse key", "input", line, slog.Any("error", err))
 			os.Exit(6)
 		}
 		keyMap[user] = parsedKey
+		permissions := ssh.Permissions{}
+		for _, option := range options {
+			if strings.HasPrefix(option, "restrict-environment=") {
+				allowedEnv := strings.TrimPrefix(option, "restrict-environment=")
+				allowedEnv = strings.Trim(allowedEnv, "\"")
+				permissions.Extensions = map[string]string{"allowed-environment": allowedEnv}
+			}
+		}
+		permissionsMap[user] = permissions
 	}
 	slog.Debug("parse authorized keys", "keyMap", keyMap)
-	return keyMap
-}
-
-/**
- * Creates map of usernames and their associated permissions
- * // TODO: actually implement something, for now just returns empty map
- */
-func parseUserPermissions() (map[string]ssh.Permissions) {
-	return map[string]ssh.Permissions{}
+	return keyMap, permissionsMap
 }
