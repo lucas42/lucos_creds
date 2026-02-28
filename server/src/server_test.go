@@ -397,4 +397,28 @@ func TestEnvironmentRestrictedAccess(test *testing.T) {
 
 	// ls on a different environment should fail with an explanatory error
 	assertSshCommandReturnsError(test, "ls lucos_test/production", StatusValidationError, "Access to `production` environment is not permitted for this key\n")
+
+	// ls <system>/<env>/<key> on a forbidden environment should fail with an explanatory error
+	assertSshCommandReturnsError(test, "ls lucos_test/production/DEVKEY", StatusValidationError, "Access to `production` environment is not permitted for this key\n")
+
+	// Reading credentials (via SFTP/SCP) from a forbidden environment should fail
+	cmd := exec.Command(
+		"/usr/bin/scp",
+		"-s", // Needed for OpenSSH 8.9 which doesn't default to SFTP (can remove for OpenSSH9.0 and above)
+		"-o BatchMode=yes",
+		"-o StrictHostKeyChecking=no",
+		"-o UserKnownHostsFile=/dev/null",
+		"-o LogLevel ERROR",
+		"-i"+TEST_CLIENTKEYPATH,
+		"-P "+TEST_PORT,
+		TEST_USER+"@localhost:lucos_test/production/.env",
+		"/dev/null",
+	)
+	assertCommandOutput(test, cmd, 255, "", "/usr/bin/scp: Connection closed\r\n")
+
+	// Linking credentials where either environment is outside the allowed environment should fail
+	assertSshCommandReturnsError(test, "lucos_test_client/production => lucos_test_server/production", StatusValidationError, "Access to environments outside of `development` is not permitted for this key\n")
+
+	// Linking credentials where client is allowed but server is forbidden should also fail
+	assertSshCommandReturnsError(test, "lucos_test_client/development => lucos_test_server/production", StatusValidationError, "Access to environments outside of `development` is not permitted for this key\n")
 }
