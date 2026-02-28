@@ -30,6 +30,11 @@ func handleSshConnection(connection net.Conn, config *ssh.ServerConfig, datastor
 	}
 	slog.Debug("Login", "user", sshConnection.User())
 
+	allowedEnvironment := ""
+	if sshConnection.Permissions != nil && sshConnection.Permissions.Extensions != nil {
+		allowedEnvironment = sshConnection.Permissions.Extensions["allowed-environment"]
+	}
+
 	go ssh.DiscardRequests(globalRequests) // Discard Keep Alive requests
 
 	for newChannel := range channels {
@@ -73,6 +78,15 @@ func handleSshConnection(connection net.Conn, config *ssh.ServerConfig, datastor
 								exitStatus.code = StatusInternalError
 								slog.Warn("Failed to get systemEnvironments", slog.Any("error", err))
 							}
+							if allowedEnvironment != "" {
+								filtered := []SystemEnvironment{}
+								for _, se := range systemEnvironments {
+									if se.Environment == allowedEnvironment {
+										filtered = append(filtered, se)
+									}
+								}
+								systemEnvironments = filtered
+							}
 							output, err := json.Marshal(systemEnvironments)
 							if err != nil {
 								exitStatus.code = StatusInternalError
@@ -85,6 +99,10 @@ func handleSshConnection(connection net.Conn, config *ssh.ServerConfig, datastor
 							if len(commandParts) == 2 {
 								system := commandParts[0]
 								environment := commandParts[1]
+								if allowedEnvironment != "" && environment != allowedEnvironment {
+									exitStatus.code = StatusValidationError
+									channel.Write([]byte("Access to `"+environment+"` environment is not permitted for this key\n"))
+								} else {
 								credentialList, err := datastore.getNormalisedCredentialsBySystemEnvironment(system, environment)
 								if err != nil {
 									exitStatus.code = StatusInternalError
@@ -101,10 +119,15 @@ func handleSshConnection(connection net.Conn, config *ssh.ServerConfig, datastor
 								}
 								output = append(output, '\n')
 								channel.Write(output)
+								}
 							} else if len(commandParts) == 3 {
 								system := commandParts[0]
 								environment := commandParts[1]
 								key := strings.ToUpper(commandParts[2])
+								if allowedEnvironment != "" && environment != allowedEnvironment {
+									exitStatus.code = StatusValidationError
+									channel.Write([]byte("Access to `"+environment+"` environment is not permitted for this key\n"))
+								} else {
 								credentialList, err := datastore.getNormalisedCredentialsBySystemEnvironment(system, environment)
 								if err != nil {
 									exitStatus.code = StatusInternalError
@@ -123,6 +146,7 @@ func handleSshConnection(connection net.Conn, config *ssh.ServerConfig, datastor
 									exitStatus.code = StatusNotFound
 									channel.Write([]byte("Can't find credential with key `"+key+"`\n"))
 								}
+								}
 							} else {
 								exitStatus.code = StatusBadSyntax
 								channel.Write([]byte("Syntax Error: Unexpected number of slashes\n"))
@@ -140,11 +164,16 @@ func handleSshConnection(connection net.Conn, config *ssh.ServerConfig, datastor
 								exitStatus.code = StatusBadSyntax
 								channel.Write([]byte("Syntax Error: Unexpected number of slashes\n"))
 							} else {
+								if allowedEnvironment != "" && (clientParts[1] != allowedEnvironment || serverParts[1] != allowedEnvironment) {
+									exitStatus.code = StatusValidationError
+									channel.Write([]byte("Access to environments outside of `"+allowedEnvironment+"` is not permitted for this key\n"))
+								} else {
 								slog.Debug("Accepting exec linked credential request", "client", clientParts, "server", serverParts)
 								err := datastore.updateLinkedCredential(clientParts[0], clientParts[1], serverParts[0], serverParts[1])
 								if err != nil {
 									exitStatus.code = StatusInternalError
 									slog.Warn("Failed to update linked credential", slog.Any("error", err))
+								}
 								}
 							}
 						}
@@ -157,6 +186,9 @@ func handleSshConnection(connection net.Conn, config *ssh.ServerConfig, datastor
 						} else if (!isValid) {
 							exitStatus.code = StatusBadSyntax
 							channel.Write([]byte("Syntax Error: Unexpected number of slashes\n"))
+						} else if (allowedEnvironment != "" && environment != allowedEnvironment) {
+							exitStatus.code = StatusValidationError
+							channel.Write([]byte("Access to `"+environment+"` environment is not permitted for this key\n"))
 						} else {
 							value := payloadParts[1]
 							slog.Debug("Accepting exec request", "system", system, "environment", environment, "key", key, "value", "****")
@@ -189,7 +221,7 @@ func handleSshConnection(connection net.Conn, config *ssh.ServerConfig, datastor
 					err = initSftpSubsystem(channel)
 					if err == nil {
 						req.Reply(true, nil) // payload is ignored for replies to channel-specific requests, so just pass nil
-						handleSftpPackets(channel, sshConnection.User(), datastore)
+						handleSftpPackets(channel, sshConnection.User(), allowedEnvironment, datastore)
 					} else {
 						slog.Warn("Failed to initialise SFTP subsystem.  Rejecting request.", slog.Any("error", err))
 						req.Reply(false, nil)
@@ -293,7 +325,7 @@ func initSftpSubsystem(channel ssh.Channel) (err error) {
 /**
  * Reads incoming SFTP packets from the client and responds appropriately
  */
-func handleSftpPackets(channel ssh.Channel, user string, datastore Datastore) (err error) {
+func handleSftpPackets(channel ssh.Channel, user string, allowedEnvironment string, datastore Datastore) (err error) {
 	for {
 		var command byte
 		var data []byte
@@ -316,6 +348,11 @@ func handleSftpPackets(channel ssh.Channel, user string, datastore Datastore) (e
 			slog.Debug("OPEN command", "request", request)
 			if request.Pflags != 0x00000001 { // Permission error if any pflag other than SSH_FXF_READ is set
 				err = errorAndCloseChannel(channel, request.Id, 3, "Permission Denied") // SSH_FX_PERMISSION_DENIED
+				break
+			}
+			_, _, reqEnvironment, _ := parseFileHandle(request.Path)
+			if allowedEnvironment != "" && reqEnvironment != "" && reqEnvironment != allowedEnvironment {
+				err = errorAndCloseChannel(channel, request.Id, 3, "Access to `"+reqEnvironment+"` environment is not permitted for this key") // SSH_FX_PERMISSION_DENIED
 				break
 			}
 
@@ -396,6 +433,11 @@ func handleSftpPackets(channel ssh.Channel, user string, datastore Datastore) (e
 				break
 			}
 			slog.Debug("STAT command", "requestId", request.Id, "path", request.Path)
+			_, _, statEnvironment, _ := parseFileHandle(request.Path)
+			if allowedEnvironment != "" && statEnvironment != "" && statEnvironment != allowedEnvironment {
+				err = errorAndCloseChannel(channel, request.Id, 3, "Access to `"+statEnvironment+"` environment is not permitted for this key") // SSH_FX_PERMISSION_DENIED
+				break
+			}
 			found, _, handleErr := getHandle(user, request.Path)
 			if handleErr != nil {
 				err = handleErr
