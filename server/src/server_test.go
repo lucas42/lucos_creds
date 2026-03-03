@@ -325,6 +325,22 @@ func TestDeleteCredentialOverSSH(test *testing.T) {
 	assertScpCommandReturnsContent(test, "lucos_test_server/staging/.env", "ENVIRONMENT=\"staging\"\nSYSTEM=\"lucos_test_server\"\n")
 
 }
+func TestDeleteLinkedCredentialOverSSH(test *testing.T) {
+	defer startTestServer(test)()
+
+	// Create the linked credential first
+	assertSshCommandReturnsOutput(test, "lucos_test_client/production => lucos_test_server/production", "")
+
+	// Delete the linked credential
+	assertSshCommandReturnsOutput(test, "rm lucos_test_client/production => lucos_test_server/production", "")
+
+	// Verify client no longer has the linked key
+	assertScpCommandReturnsContent(test, "lucos_test_client/production/.env", "ENVIRONMENT=\"production\"\nSYSTEM=\"lucos_test_client\"\n")
+
+	// Verify server no longer has CLIENT_KEYS
+	assertScpCommandReturnsContent(test, "lucos_test_server/production/.env", "ENVIRONMENT=\"production\"\nSYSTEM=\"lucos_test_server\"\n")
+}
+
 func TestLsOverSSH(test *testing.T) {
 	defer startTestServer(test)()
 
