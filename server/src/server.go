@@ -152,6 +152,33 @@ func handleSshConnection(connection net.Conn, config *ssh.ServerConfig, datastor
 								channel.Write([]byte("Syntax Error: Unexpected number of slashes\n"))
 							}
 						}
+					} else if (strings.HasPrefix(payload.Data, "rm ") && strings.Contains(payload.Data, "=>")) {
+						command := strings.TrimSpace(strings.TrimPrefix(payload.Data, "rm"))
+						linkedCredentialParts := strings.Split(command, "=>")
+						if (len(linkedCredentialParts) != 2) {
+							exitStatus.code = StatusBadSyntax
+							channel.Write([]byte("Syntax Error: Unexpected number of arrows\n"))
+						} else {
+							clientParts := strings.Split(strings.TrimSpace(linkedCredentialParts[0]), "/")
+							serverParts := strings.Split(strings.TrimSpace(linkedCredentialParts[1]), "/")
+							// serverParts may have 1 part (just system) or 2 parts (system/environment)
+							if (len(clientParts) != 2 || len(serverParts) < 1 || len(serverParts) > 2) {
+								exitStatus.code = StatusBadSyntax
+								channel.Write([]byte("Syntax Error: Unexpected number of slashes\n"))
+							} else {
+								if allowedEnvironment != "" && clientParts[1] != allowedEnvironment {
+									exitStatus.code = StatusValidationError
+									channel.Write([]byte("Access to environments outside of `"+allowedEnvironment+"` is not permitted for this key\n"))
+								} else {
+								slog.Debug("Accepting exec delete linked credential request", "client", clientParts, "server", serverParts)
+								err := datastore.deleteLinkedCredential(clientParts[0], clientParts[1], serverParts[0])
+								if err != nil {
+									exitStatus.code = StatusInternalError
+									slog.Warn("Failed to delete linked credential", slog.Any("error", err))
+								}
+								}
+							}
+						}
 					} else if (strings.Contains(payload.Data, "=>")) {
 						linkedCredentialParts := strings.Split(payload.Data, "=>")
 						if (len(linkedCredentialParts) != 2) {

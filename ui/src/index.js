@@ -156,6 +156,36 @@ app.post('/delete-simple-credential', catchErrors(async (req, res) => {
 }));
 
 
+app.get('/delete-linked-credential', catchErrors(async (req, res) => {
+	res.render('delete-linked-credential', {
+		clientsystem: req.query.clientsystem,
+		clientenvironment: req.query.clientenvironment,
+		serversystem: req.query.serversystem,
+		serverenvironment: req.query.serverenvironment,
+		error: req.query.error,
+	});
+}));
+app.post('/delete-linked-credential', catchErrors(async (req, res) => {
+	const { clientsystem, clientenvironment, serversystem, serverenvironment } = req.body;
+	try {
+		await sshExec(`rm ${clientsystem}/${clientenvironment} => ${serversystem}`);
+	} catch (error) {
+		if (error.code == 4) {
+			const params = new URLSearchParams({clientsystem, clientenvironment, serversystem, serverenvironment});
+			params.append('error', error.stdout.trim());
+			res.redirect(303, '/delete-linked-credential?'+params.toString());
+			return;
+		} else {
+			throw error;
+		}
+	}
+	if (serverenvironment) {
+		res.redirect(303, `/system/${serversystem}/${serverenvironment}`);
+	} else {
+		res.redirect(303, `/system/${clientsystem}/${clientenvironment}`);
+	}
+}));
+
 app.get('/update-linked-credential', catchErrors(async (req, res) => {
 	const systemEnvironments = await getSystemEnvironments();
 	const systems = {};

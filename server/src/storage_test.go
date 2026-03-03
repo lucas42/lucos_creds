@@ -157,6 +157,67 @@ func TestUpdatingLinkedCredentialNotifiesLoganne(test *testing.T) {
 	assertEqual(test, "Wrong environment sent to loganne", "testing", lastLoganneEnvironment)
 	assertEqual(test, "Wrong key sent to loganne", "CLIENT_KEYS", lastLoganneKey)
 }
+func TestDeletingLinkedCredential(test *testing.T) {
+	datastorePath := "test_db.sqlite"
+	dataKeyPath := "test_data.key"
+	defer os.Remove(datastorePath)
+	defer os.Remove(dataKeyPath)
+	datastore := initDatastore(datastorePath, dataKeyPath, MockLoganne{})
+	datastore.updateLinkedCredential("lucos_test_client", "testing", "lucos_test_server", "testing")
+	// Verify the link exists before deletion
+	clientCreds, err := datastore.getAllCredentialsBySystemEnvironment("lucos_test_client", "testing")
+	assertNoError(test, err)
+	assertMapContains(test, "Client should have linked credential before deletion", "KEY_LUCOS_TEST_SERVER", clientCreds)
+	// Delete the linked credential
+	err = datastore.deleteLinkedCredential("lucos_test_client", "testing", "lucos_test_server")
+	assertNoError(test, err)
+	// Verify the link is gone from both sides
+	clientCreds, err = datastore.getAllCredentialsBySystemEnvironment("lucos_test_client", "testing")
+	assertNoError(test, err)
+	assertMapNotContains(test, "Client should not have linked credential after deletion", "KEY_LUCOS_TEST_SERVER", clientCreds)
+	serverCreds, err := datastore.getAllCredentialsBySystemEnvironment("lucos_test_server", "testing")
+	assertNoError(test, err)
+	assertMapNotContains(test, "Server should not have CLIENT_KEYS after deletion", "CLIENT_KEYS", serverCreds)
+}
+
+func TestDeletingLinkedCredentialIsTargettedCorrectly(test *testing.T) {
+	datastorePath := "test_db.sqlite"
+	dataKeyPath := "test_data.key"
+	defer os.Remove(datastorePath)
+	defer os.Remove(dataKeyPath)
+	datastore := initDatastore(datastorePath, dataKeyPath, MockLoganne{})
+	datastore.updateLinkedCredential("lucos_test_client1", "testing", "lucos_test_server", "testing")
+	datastore.updateLinkedCredential("lucos_test_client2", "testing", "lucos_test_server", "testing")
+	// Delete only the first link
+	err := datastore.deleteLinkedCredential("lucos_test_client1", "testing", "lucos_test_server")
+	assertNoError(test, err)
+	// First client link should be gone
+	clientCreds, err := datastore.getAllCredentialsBySystemEnvironment("lucos_test_client1", "testing")
+	assertNoError(test, err)
+	assertMapNotContains(test, "Client1 should not have linked credential after deletion", "KEY_LUCOS_TEST_SERVER", clientCreds)
+	// Second client link should still exist
+	clientCreds, err = datastore.getAllCredentialsBySystemEnvironment("lucos_test_client2", "testing")
+	assertNoError(test, err)
+	assertMapContains(test, "Client2 should still have linked credential", "KEY_LUCOS_TEST_SERVER", clientCreds)
+	// SERVER CLIENT_KEYS should only contain client2
+	serverCreds, err := datastore.getAllCredentialsBySystemEnvironment("lucos_test_server", "testing")
+	assertNoError(test, err)
+	assertMapContains(test, "Server should still have CLIENT_KEYS for client2", "CLIENT_KEYS", serverCreds)
+}
+
+func TestDeletingLinkedCredentialNotifiesLoganne(test *testing.T) {
+	loganneRequestCount = 0
+	datastorePath := "test_db.sqlite"
+	dataKeyPath := "test_data.key"
+	defer os.Remove(datastorePath)
+	defer os.Remove(dataKeyPath)
+	datastore := initDatastore(datastorePath, dataKeyPath, MockLoganne{})
+	datastore.updateLinkedCredential("lucos_test_client", "testing", "lucos_test_server", "testing")
+	loganneRequestCount = 0 // Reset after setup
+	datastore.deleteLinkedCredential("lucos_test_client", "testing", "lucos_test_server")
+	assertEqual(test, "Wrong number of calls to loganne", 2, loganneRequestCount)
+}
+
 
 func TestRejectSimpleCredentialsWhichMayConflictWithBuiltInCredentials(test *testing.T) {
 	datastorePath := "test_db.sqlite"

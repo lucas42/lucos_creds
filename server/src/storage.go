@@ -340,6 +340,27 @@ func (datastore Datastore) updateLinkedCredential(client_system string, client_e
 	return
 }
 
+func (datastore Datastore) deleteLinkedCredential(client_system string, client_environment string, server_system string) (err error) {
+	// Fetch the full credential first so we have serverenvironment for loganne notifications
+	credential := LinkedCredential{}
+	err = datastore.db.Get(&credential, "SELECT * FROM linked_credential WHERE clientsystem = $1 AND clientenvironment = $2 AND serversystem = $3", client_system, client_environment, server_system)
+	if err != nil {
+		if err.Error() == "sql: no rows in result set" {
+			slog.Info("Linked Credential not found, nothing to delete", "clientsystem", client_system, "clientenvironment", client_environment, "serversystem", server_system)
+			err = nil
+		}
+		return
+	}
+	_, err = datastore.db.Exec("DELETE FROM linked_credential WHERE clientsystem = $1 AND clientenvironment = $2 AND serversystem = $3", client_system, client_environment, server_system)
+	if err != nil {
+		return
+	}
+	slog.Info("Deleted Linked Credential", "credential", credential)
+	datastore.loganne.postCredentialDeleted(credential.ClientSystem, credential.ClientEnvironment, strings.ToUpper("KEY_"+credential.ServerSystem))
+	datastore.loganne.postCredentialDeleted(credential.ServerSystem, credential.ServerEnvironment, strings.ToUpper("CLIENT_KEYS"))
+	return
+}
+
 func (datastore Datastore) deleteCredential(system string, environment string, key string) (err error) {
 	credential := SimpleCredential{}
 	credential.System = system
