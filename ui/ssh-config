@@ -1,3 +1,8 @@
-User lucos_creds_ui
-BatchMode yes
-StrictHostKeyChecking accept-new
+Host lucos_creds
+	HostName lucos-creds
+	Port 2202
+
+Host *
+	User lucos_creds_ui
+	BatchMode yes
+	StrictHostKeyChecking accept-new
