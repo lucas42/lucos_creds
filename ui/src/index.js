@@ -255,7 +255,7 @@ async function getCredential(system, environment, key) {
 }
 
 async function sshExec(command) {
-	const output = await exec(`ssh -p 2202 lucos_creds \"${command.replace('"','\\"')}\"`);
+	const output = await exec(`ssh lucos_creds \"${command.replace('"','\\"')}\"`);
 	return output.stdout;
 }
 
