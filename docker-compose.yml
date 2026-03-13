@@ -12,6 +12,12 @@ services:
     environment:
       - LOGANNE_ENDPOINT
       - APP_ORIGIN
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 2202"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
   lucos_creds_configy_sync:
     build: configy_sync
     container_name: lucos_creds_configy_sync
@@ -23,6 +29,12 @@ services:
     depends_on:
       lucos_creds:
         condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "test -p /var/log/cron.log"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
   lucos_creds_ui:
     build: ui
     container_name: lucos_creds_ui
@@ -33,6 +45,12 @@ services:
     environment:
       - PORT
       - UI_PRIVATE_SSH_KEY
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:${PORT}/_info"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
 
 volumes:
   store:
