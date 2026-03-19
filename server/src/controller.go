@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log/slog"
 	"sort"
 	"strings"
 )
@@ -20,10 +21,14 @@ func getHandle(user string, path string) (found bool, handle string, err error) 
 func readFileByHandle(user string, handle string, datastore Datastore) (found bool, contents string, err error) {
 	valid, system, environment, filename := parseFileHandle(handle)
 	if (valid && filename == ".env") {
+		found = true
 		var credentials map[string]string
 		credentials, err = datastore.getAllCredentialsBySystemEnvironment(system, environment)
+		if err != nil {
+			return
+		}
+		slog.Info("Served .env", "system", system, "environment", environment, "credentials", len(credentials))
 		contents, err = generateEnvFile(credentials)
-		found = true
 		return
 	}
 	found = false
