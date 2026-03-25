@@ -1,35 +1,47 @@
 version: 2
 updates:
-- package-ecosystem: docker
-  directory: "/server"
-  schedule:
-    interval: daily
-    time: "07:00"
-  open-pull-requests-limit: 10
-- package-ecosystem: gomod
-  directory: "/server"
-  schedule:
-    interval: daily
-    time: "07:00"
-- package-ecosystem: docker
-  directory: "/ui"
-  schedule:
-    interval: daily
-    time: "07:00"
-  open-pull-requests-limit: 10
-- package-ecosystem: npm
-  directory: "/ui"
-  schedule:
-    interval: daily
-    time: "07:00"
-  open-pull-requests-limit: 10
-- package-ecosystem: "github-actions"
-  directory: "/"
-  schedule:
-    interval: daily
-    time: "07:00"
-- package-ecosystem: pip
-  directory: "/configy_sync"
-  schedule:
-    interval: daily
-    time: "07:00"
+  - package-ecosystem: docker
+    directory: /server
+    schedule:
+      interval: daily
+      time: '07:00'
+    open-pull-requests-limit: 10
+    allow:
+      - dependency-type: all
+  - package-ecosystem: gomod
+    directory: /server
+    schedule:
+      interval: daily
+      time: '07:00'
+    allow:
+      - dependency-type: all
+  - package-ecosystem: docker
+    directory: /ui
+    schedule:
+      interval: daily
+      time: '07:00'
+    open-pull-requests-limit: 10
+    allow:
+      - dependency-type: all
+  - package-ecosystem: npm
+    directory: /ui
+    schedule:
+      interval: daily
+      time: '07:00'
+    open-pull-requests-limit: 10
+    allow:
+      - dependency-type: all
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: daily
+      time: '07:00'
+    allow:
+      - dependency-type: all
+  - package-ecosystem: pip
+    directory: /configy_sync
+    schedule:
+      interval: daily
+      time: '07:00'
+    allow:
+      - dependency-type: all
