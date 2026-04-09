@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"os"
 )
 
 type LoganneInterface interface {
@@ -38,7 +39,14 @@ func (loganne Loganne) post(eventType string, humanReadable string, credential N
 	}
 
 	postData, _ := json.Marshal(data)
-	response, err := http.Post(loganne.endpoint, "application/json", bytes.NewBuffer(postData))
+	req, err := http.NewRequest("POST", loganne.endpoint, bytes.NewBuffer(postData))
+	if err != nil {
+		slog.Warn("Error occured whilst posting to Loganne", slog.Any("error", err))
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", os.Getenv("SYSTEM"))
+	response, err := http.DefaultClient.Do(req)
 	if err != nil {
 		slog.Warn("Error occured whilst posting to Loganne", slog.Any("error", err))
 		return
