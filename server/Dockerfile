@@ -1,4 +1,6 @@
 FROM golang:1.26 AS builder
+ARG VERSION
+ENV VERSION=$VERSION
 
 WORKDIR /go/src/lucos_creds
 
