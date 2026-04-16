@@ -94,13 +94,19 @@ a:hover {
 	width: 105px;
 	display: inline-block;
 	font-weight: bold;
+	vertical-align: top;
 }
-.entry-form .form-field input[type=text] {
+.entry-form .form-field input[type=text],
+.entry-form .form-field textarea {
 	min-width: 200px;
 }
 .entry-form .form-field input#key {
 	font-family: "Courier New", monospace;
 	text-transform: uppercase;
+}
+.entry-form .form-field textarea#value {
+	font-family: "Courier New", monospace;
+	resize: vertical;
 }
 .entry-form .form-field select {
 	min-width: 230px;
@@ -128,6 +134,7 @@ a:hover {
 	display: inline-block;
 	text-align: center;
 	font-style: italic;
+	font-family: "Courier New", monospace;
 	word-break: break-all;
 	padding: 0 0.3em;
 	white-space: pre-wrap;
