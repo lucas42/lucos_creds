@@ -5,7 +5,7 @@ services:
     hostname: lucos-creds
     ports:
       - "2202:2202"
-    image: lucas42/lucos_creds
+    image: lucas42/lucos_creds:${VERSION:-latest}
     volumes:
       - "store:/var/lib/creds_store/"
     restart: always
@@ -21,7 +21,7 @@ services:
   lucos_creds_configy_sync:
     build: configy_sync
     container_name: lucos_creds_configy_sync
-    image: lucas42/lucos_creds_configy_sync
+    image: lucas42/lucos_creds_configy_sync:${VERSION:-latest}
     restart: always
     environment:
       - SCHEDULE_TRACKER_ENDPOINT
@@ -40,7 +40,7 @@ services:
     container_name: lucos_creds_ui
     ports:
       - $PORT:$PORT
-    image: lucas42/lucos_creds_ui
+    image: lucas42/lucos_creds_ui:${VERSION:-latest}
     restart: always
     environment:
       - PORT
