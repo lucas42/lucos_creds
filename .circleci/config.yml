@@ -28,17 +28,17 @@ workflows:
   build-deploy:
     jobs:
       - test
-      - lucos/build-amd64:
+      - lucos/build:
           serial-group: << pipeline.project.slug >>/build
       # Self-deploy: LUCOS_DEPLOY_ENV_BASE64 is set as a CircleCI project env var
       # (base64-encoded production .env), so the deploy orb skips the SCP to
       # creds.l42.eu entirely and avoids the circular dependency where this
       # service would need itself to be up in order to deploy itself.
       - lucos/deploy-avalon:
-          serial-group: << pipeline.project.slug >>/deploy-avalon
+          serial-group: deploy-avalon
           requires:
             - test
-            - lucos/build-amd64
+            - lucos/build
           filters:
             branches:
               only:
