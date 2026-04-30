@@ -1,5 +1,6 @@
 package main
 import (
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -7,6 +8,7 @@ import (
 	"runtime/debug"
 	"log/slog"
 	"strings"
+	"sync"
 	"testing"
 	"golang.org/x/crypto/ssh"
 )
@@ -437,4 +439,61 @@ func TestEnvironmentRestrictedAccess(test *testing.T) {
 
 	// Linking credentials where client is allowed but server is forbidden should also fail
 	assertSshCommandReturnsError(test, "lucos_test_client/development => lucos_test_server/production", StatusValidationError, "Access to environments outside of `development` is not permitted for this key\n")
+}
+
+// Tests that many simultaneous SCP fetches all return complete, correct results.
+// This guards against concurrency issues in the SQLite layer under high load.
+func TestConcurrentEnvFileReads(test *testing.T) {
+	defer startTestServer(test)()
+
+	// Set up a known credential set
+	assertSshCommandReturnsOutput(test, "lucos_concurrent/production/ALPHA=value1", "")
+	assertSshCommandReturnsOutput(test, "lucos_concurrent/production/BETA=value2", "")
+	assertSshCommandReturnsOutput(test, "lucos_concurrent/production/GAMMA=value3", "")
+
+	expected := "ALPHA=\"value1\"\nBETA=\"value2\"\nENVIRONMENT=\"production\"\nGAMMA=\"value3\"\nSYSTEM=\"lucos_concurrent\"\n"
+
+	const concurrency = 20
+	var wg sync.WaitGroup
+	errors := make(chan error, concurrency)
+
+	for i := 0; i < concurrency; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			testFileName := fmt.Sprintf("concurrent_test_%d.env", idx)
+			defer os.Remove(testFileName)
+
+			cmd := exec.Command(
+				"/usr/bin/scp",
+				"-s",
+				"-o BatchMode=yes",
+				"-o StrictHostKeyChecking=no",
+				"-o UserKnownHostsFile=/dev/null",
+				"-i"+TEST_CLIENTKEYPATH,
+				"-P "+TEST_PORT,
+				TEST_USER+"@localhost:lucos_concurrent/production/.env",
+				testFileName,
+			)
+			if err := cmd.Run(); err != nil {
+				errors <- fmt.Errorf("scp failed (goroutine %d): %v", idx, err)
+				return
+			}
+			contents, err := os.ReadFile(testFileName)
+			if err != nil {
+				errors <- fmt.Errorf("ReadFile failed (goroutine %d): %v", idx, err)
+				return
+			}
+			if string(contents) != expected {
+				errors <- fmt.Errorf("goroutine %d: unexpected contents: got %q, want %q", idx, string(contents), expected)
+			}
+		}(i)
+	}
+
+	wg.Wait()
+	close(errors)
+
+	for err := range errors {
+		test.Error(err)
+	}
 }

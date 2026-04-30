@@ -27,6 +27,7 @@ func initDatastore(datastorePath string, dataKeyPath string, loganne LoganneInte
 	dataBlockCipher := getCreateBlockCipher(dataKeyPath)
 
 	db := sqlx.MustConnect("sqlite3", datastorePath+"?_busy_timeout=10000")
+	db.SetMaxOpenConns(1) // Serialise all DB operations through a single connection to prevent SQLite concurrency issues
 	datastore := Datastore{ dataBlockCipher, db, loganne }
 
 	datastore.db.MustExec("PRAGMA foreign_keys = ON;")
@@ -168,8 +169,9 @@ func (datastore Datastore) getNormalisedCredentialsBySystemEnvironment(system st
 	for _, fetcher := range credentialFetchers {
 		credentials, fetchErr := fetcher(system, environment)
 		if fetchErr != nil {
-			slog.Warn("Failed to get some Credentials", "system", system, "environment", environment, slog.Any("error", err))
+			slog.Warn("Failed to get some Credentials", "system", system, "environment", environment, slog.Any("error", fetchErr))
 			err = fetchErr
+			allCredentials = make(map[string]NormalisedCredential) // Reset to empty to prevent returning partial results
 			return
 		}
 		for _, credential := range credentials {
