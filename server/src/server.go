@@ -77,23 +77,24 @@ func handleSshConnection(connection net.Conn, config *ssh.ServerConfig, datastor
 							if err != nil {
 								exitStatus.code = StatusInternalError
 								slog.Warn("Failed to get systemEnvironments", slog.Any("error", err))
-							}
-							if allowedEnvironment != "" {
-								filtered := []SystemEnvironment{}
-								for _, se := range systemEnvironments {
-									if se.Environment == allowedEnvironment {
-										filtered = append(filtered, se)
+							} else {
+								if allowedEnvironment != "" {
+									filtered := []SystemEnvironment{}
+									for _, se := range systemEnvironments {
+										if se.Environment == allowedEnvironment {
+											filtered = append(filtered, se)
+										}
 									}
+									systemEnvironments = filtered
 								}
-								systemEnvironments = filtered
+								output, err := json.Marshal(systemEnvironments)
+								if err != nil {
+									exitStatus.code = StatusInternalError
+									slog.Warn("Failed to marshal JSON", slog.Any("error", err))
+								}
+								output = append(output, '\n')
+								channel.Write(output)
 							}
-							output, err := json.Marshal(systemEnvironments)
-							if err != nil {
-								exitStatus.code = StatusInternalError
-								slog.Warn("Failed to marshal JSON", slog.Any("error", err))
-							}
-							output = append(output, '\n')
-							channel.Write(output)
 						} else {
 							commandParts := strings.Split(command, "/")
 							if len(commandParts) == 2 {
