@@ -107,18 +107,19 @@ func handleSshConnection(connection net.Conn, config *ssh.ServerConfig, datastor
 								if err != nil {
 									exitStatus.code = StatusInternalError
 									slog.Warn("Failed to get credentials", slog.Any("error", err))
+								} else {
+									for key, credential := range credentialList {
+										credential.Value = ""
+										credentialList[key] = credential
+									}
+									output, err := json.Marshal(credentialList)
+									if err != nil {
+										exitStatus.code = StatusInternalError
+										slog.Warn("Failed to marshal JSON", slog.Any("error", err))
+									}
+									output = append(output, '\n')
+									channel.Write(output)
 								}
-								for key, credential := range credentialList {
-									credential.Value = ""
-									credentialList[key] = credential
-								}
-								output, err := json.Marshal(credentialList)
-								if err != nil {
-									exitStatus.code = StatusInternalError
-									slog.Warn("Failed to marshal JSON", slog.Any("error", err))
-								}
-								output = append(output, '\n')
-								channel.Write(output)
 								}
 							} else if len(commandParts) == 3 {
 								system := commandParts[0]
@@ -132,19 +133,20 @@ func handleSshConnection(connection net.Conn, config *ssh.ServerConfig, datastor
 								if err != nil {
 									exitStatus.code = StatusInternalError
 									slog.Warn("Failed to get credentials", slog.Any("error", err))
-								}
-								credential, found := credentialList[key]
-								if found {
-									output, err := json.Marshal(credential)
-									if err != nil {
-										exitStatus.code = StatusInternalError
-										slog.Warn("Failed to marshal JSON", slog.Any("error", err))
-									}
-									output = append(output, '\n')
-									channel.Write(output)
 								} else {
-									exitStatus.code = StatusNotFound
-									channel.Write([]byte("Can't find credential with key `"+key+"`\n"))
+									credential, found := credentialList[key]
+									if found {
+										output, err := json.Marshal(credential)
+										if err != nil {
+											exitStatus.code = StatusInternalError
+											slog.Warn("Failed to marshal JSON", slog.Any("error", err))
+										}
+										output = append(output, '\n')
+										channel.Write(output)
+									} else {
+										exitStatus.code = StatusNotFound
+										channel.Write([]byte("Can't find credential with key `"+key+"`\n"))
+									}
 								}
 								}
 							} else {
