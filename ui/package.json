@@ -14,7 +14,7 @@
   },
   "devDependencies": {
     "folder-hash": "^4.1.2",
-    "lucos_navbar": "^2.1.67",
+    "lucos_navbar": "^2.1.69",
     "webpack-cli": "^7.0.2"
   },
   "overrides": {
