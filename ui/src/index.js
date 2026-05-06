@@ -254,6 +254,26 @@ async function getCredential(system, environment, key) {
 	return JSON.parse(output);
 }
 
+async function sleep(ms) {
+	return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function withRetry(fn, maxRetries = 3, backoffMs = 5000) {
+	let lastError;
+	for (let attempt = 0; attempt <= maxRetries; attempt++) {
+		if (attempt > 0) {
+			console.warn(`SSH attempt ${attempt} failed, retrying in ${backoffMs}ms:`, lastError.message);
+			await sleep(backoffMs);
+		}
+		try {
+			return await fn();
+		} catch (error) {
+			lastError = error;
+		}
+	}
+	throw lastError;
+}
+
 async function sshExec(command) {
 	const output = await exec(`ssh lucos_creds \"${command.replace('"','\\"')}\"`);
 	return output.stdout;
@@ -277,14 +297,14 @@ async function checkServerConnection() {
 async function getSystemMetric() {
 	let value = 0;
 	try {
-		const systemEnvironments = await getSystemEnvironments();
+		const systemEnvironments = await withRetry(() => getSystemEnvironments());
 		const systems = [];
 		systemEnvironments.forEach(systemEnvironment => {
 			systems[systemEnvironment.system] = true;
 		});
 		value = Object.keys(systems).length;
 	} catch (error) {
-		console.warn('Error getting System Metric, returning 0', error);
+		console.warn('Error getting System Metric after retries, returning 0', error);
 	}
 	return {
 		techDetail: `Number of different systems which have credentials stored against`,
