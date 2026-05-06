@@ -259,19 +259,18 @@ async function sleep(ms) {
 }
 
 async function withRetry(fn, maxRetries = 3, backoffMs = 5000) {
-	let lastError;
 	for (let attempt = 0; attempt <= maxRetries; attempt++) {
-		if (attempt > 0) {
-			console.warn(`SSH attempt ${attempt} failed, retrying in ${backoffMs}ms:`, lastError.message);
-			await sleep(backoffMs);
-		}
 		try {
 			return await fn();
 		} catch (error) {
-			lastError = error;
+			if (attempt < maxRetries) {
+				console.warn(`SSH attempt ${attempt + 1} failed, retrying in ${backoffMs}ms:`, error.message);
+				await sleep(backoffMs);
+			} else {
+				throw error;
+			}
 		}
 	}
-	throw lastError;
 }
 
 async function sshExec(command) {
