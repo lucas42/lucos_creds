@@ -1,6 +1,9 @@
 import querystring from 'querystring';
 let agents = {}; // Local cache of agent data, keyed by authenication token
 
+const NEGATIVE_CACHE_TTL = 30_000; // ms — how long to cache an invalid token
+let invalidTokens = {}; // token → expiry timestamp
+
 /**
  * Checks whether a given token is authenticated to access the service
  * @returns Promise{boolean}
@@ -11,10 +14,19 @@ export async function isAuthenticated(token) {
 	// If we've already validated the given token before, approve immediately
 	if (agents[token]) return true;
 
+	// If we've recently confirmed the token is invalid, reject immediately (negative cache)
+	if (invalidTokens[token] && Date.now() < invalidTokens[token]) return false;
+
 	// Otherwise, verify it against the authentication service
 	const authurl = 'https://auth.l42.eu/data?' + querystring.stringify({ token });
 	try {
 		const auth_resp = await fetch(authurl);
+		if (auth_resp.status === 401) {
+			// Token not recognised — expected for expired sessions, no error logging needed
+			console.debug("Auth token not valid, caching negative result");
+			invalidTokens[token] = Date.now() + NEGATIVE_CACHE_TTL;
+			return false;
+		}
 		if (auth_resp.status !== 200) throw new Error(`Bad Status Code from auth server ${auth_resp.status}`);
 		agents[token] = await auth_resp.json(); // Cache the data locally, so we don't need to make a call for this token in future
 		return true;
