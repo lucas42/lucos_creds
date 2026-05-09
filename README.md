@@ -1,6 +1,12 @@
 # lucos_creds
 A credential manager for lucos systems
 
+> **⚠️ Operational note — updating lucos_creds' own production credentials**
+>
+> `lucos_creds` uses a self-deploy mechanism that keeps a base64 snapshot of its own production `.env` in a CircleCI environment variable (`LUCOS_DEPLOY_ENV_BASE64`). **If you update a `lucos_creds/production` credential, you must also update that CircleCI env var**, or the next deploy will silently revert your change. This does not apply to any other system.
+>
+> See the [runbook](https://github.com/lucas42/lucos/blob/main/docs/runbooks/update-lucos-creds-production.md) for the full procedure.
+
 
 ## Dependencies
 
@@ -31,6 +37,8 @@ Copy the directory from the docker host at /var/lib/docker/volumes/lucos\_creds\
 ## Usage
 
 ### Setting or updating a credential
+
+> **⚠️ Special case: if `system` is `lucos_creds` and `environment` is `production`**, this command alone is not sufficient. The deploy pipeline reads `.env` from a separate CircleCI env var snapshot (`LUCOS_DEPLOY_ENV_BASE64`) — if you don't also update that, the next deploy will silently revert your change. Follow the [runbook](https://github.com/lucas42/lucos/blob/main/docs/runbooks/update-lucos-creds-production.md) instead.
 
 `ssh -p 2202 creds.l42.eu ${system}/${environment}/${key}=${value}`
 
