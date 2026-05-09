@@ -10,7 +10,7 @@ const unlink = promisify(fs.unlink);
 const app = express();
 app.auth = authMiddleware;
 const port = process.env.PORT || 3000;
-fs.writeFileSync('/root/.ssh/id_ed25519', process.env.UI_PRIVATE_SSH_KEY.replaceAll('~','=').replaceAll('\\n', '\n'));
+fs.writeFileSync('/root/.ssh/id_ed25519', process.env.UI_PRIVATE_SSH_KEY);
 
 app.set('view engine', 'ejs');
 app.use(express.json());
