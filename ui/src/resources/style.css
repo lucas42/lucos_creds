@@ -190,6 +190,25 @@ a:hover {
 .error:before {
 	content: "⚠️ ";
 }
+.self-deploy-warning {
+	background: #6b3700;
+	color: #fff;
+	padding: 10px 15px;
+	border: solid 2px #3e1f00;
+	border-radius: 3px;
+	margin-bottom: 15px;
+	line-height: 1.5;
+}
+.self-deploy-warning code {
+	background: #4a2700;
+	padding: 0 0.25em;
+	border-radius: 2px;
+	font-family: "Courier New", monospace;
+}
+.self-deploy-warning a {
+	color: #ffc87a;
+	text-decoration: underline;
+}
 a.floating-nav {
 	font-weight: bold;
 	text-shadow: 0 0 5px white;
