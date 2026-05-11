@@ -10,6 +10,15 @@ const unlink = promisify(fs.unlink);
 const app = express();
 app.auth = authMiddleware;
 const port = process.env.PORT || 3000;
+
+function validateSshKey(value, varName) {
+	if (!value) throw new Error(`${varName} is empty`);
+	if (value.includes('\r')) throw new Error(`${varName} contains carriage returns — re-store with LF-only line endings`);
+	if (value.includes('~')) throw new Error(`${varName} contains "~" — likely the old substitution workaround; re-store as raw key`);
+	if (!value.startsWith('-----BEGIN ')) throw new Error(`${varName} does not start with a PEM header`);
+	if (!value.trimEnd().endsWith('-----')) throw new Error(`${varName} does not end with a PEM footer`);
+}
+validateSshKey(process.env.UI_PRIVATE_SSH_KEY, 'UI_PRIVATE_SSH_KEY');
 fs.writeFileSync('/root/.ssh/id_ed25519', process.env.UI_PRIVATE_SSH_KEY);
 
 app.set('view engine', 'ejs');
