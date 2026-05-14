@@ -5,6 +5,7 @@ name = "pypi"
 
 [packages]
 requests = "*"
+lucos-schedule-tracker-pythonclient = ">=2.0.0"
 
 [dev-packages]
 

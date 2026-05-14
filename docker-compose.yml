@@ -24,6 +24,7 @@ services:
     image: lucas42/lucos_creds_configy_sync:${VERSION:-latest}
     restart: always
     environment:
+      - SYSTEM
       - SCHEDULE_TRACKER_ENDPOINT
       - CONFIGY_SYNC_PRIVATE_SSH_KEY
     depends_on:
