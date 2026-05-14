@@ -4,11 +4,10 @@ Fetches the list of systems from lucos_configy and updates values in the credent
 """
 import sys, os, subprocess, json, datetime
 import requests
+from schedule_tracker import updateScheduleTracker
 
 class NotFound(Exception):
     pass
-
-SCHEDULE_TRACKER_ENDPOINT = os.environ.get("SCHEDULE_TRACKER_ENDPOINT")
 
 session = requests.Session()
 session.headers.update({
@@ -68,19 +67,9 @@ if __name__ == "__main__":
 				updateCredential(system['id'], 'development', 'APP_ORIGIN', None)
 				updateCredential(system['id'], 'production', 'APP_ORIGIN', None)
 
-		# Schedule tracker success
-		session.post(
-			SCHEDULE_TRACKER_ENDPOINT,
-			json={"system": "lucos_creds", "job_name": "configy_sync", "frequency": 1*60*60, "status": "success"},
-			headers={"Content-Type": "application/json"},
-		)
+		updateScheduleTracker(success=True, job_name="configy_sync", frequency=1*60*60)
 		print(f"[{datetime.datetime.now()}] Sync Complete")
 	except Exception as e:
 		error_message = f"Sync failed: {e}"
-		print(f"[{datetime.datetime.now()}] Sending error to schedule tracker")
-		session.post(
-			SCHEDULE_TRACKER_ENDPOINT,
-			json={"system": "lucos_creds", "job_name": "configy_sync", "frequency": 1*60*60, "status": "error", "message": error_message},
-			headers={"Content-Type": "application/json"},
-		)
+		updateScheduleTracker(success=False, job_name="configy_sync", frequency=1*60*60, message=error_message)
 		sys.exit(error_message)
