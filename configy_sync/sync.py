@@ -71,7 +71,7 @@ if __name__ == "__main__":
 		# Schedule tracker success
 		session.post(
 			SCHEDULE_TRACKER_ENDPOINT,
-			json={"system": "lucos_creds_configy_sync", "frequency": 1*60*60, "status": "success"},
+			json={"system": "lucos_creds", "job_name": "configy_sync", "frequency": 1*60*60, "status": "success"},
 			headers={"Content-Type": "application/json"},
 		)
 		print(f"[{datetime.datetime.now()}] Sync Complete")
@@ -80,7 +80,7 @@ if __name__ == "__main__":
 		print(f"[{datetime.datetime.now()}] Sending error to schedule tracker")
 		session.post(
 			SCHEDULE_TRACKER_ENDPOINT,
-			json={"system": "lucos_creds_configy_sync", "frequency": 1*60*60, "status": "error", "message": error_message},
+			json={"system": "lucos_creds", "job_name": "configy_sync", "frequency": 1*60*60, "status": "error", "message": error_message},
 			headers={"Content-Type": "application/json"},
 		)
 		sys.exit(error_message)
