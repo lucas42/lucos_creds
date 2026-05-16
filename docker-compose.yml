@@ -12,6 +12,7 @@ services:
     environment:
       - LOGANNE_ENDPOINT
       - APP_ORIGIN
+      - DEBUG
     healthcheck:
       test: ["CMD-SHELL", "nc -z 127.0.0.1 2202"]
       interval: 10s
