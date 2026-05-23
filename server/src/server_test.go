@@ -118,6 +118,53 @@ func assertScpCommandReturnsContent(test *testing.T, path string, expected_conte
 	assertEqual(test, "Unexpected content of "+path, expected_content, string(contents))
 }
 
+// TestIsPreVersionExchangeDisconnect verifies that connections closed before the
+// SSH version exchange (healthcheck probes, TCP-only scanners) are classified as
+// benign and logged at DEBUG, while genuine SSH handshake failures remain at WARN.
+func TestIsPreVersionExchangeDisconnect(test *testing.T) {
+	cases := []struct {
+		name     string
+		err      error
+		expected bool
+	}{
+		{
+			name:     "io.EOF is pre-version-exchange (nc -z probe)",
+			err:      io.EOF,
+			expected: true,
+		},
+		{
+			name:     "io.ErrUnexpectedEOF is pre-version-exchange",
+			err:      io.ErrUnexpectedEOF,
+			expected: true,
+		},
+		{
+			name:     "connection reset by peer is pre-version-exchange",
+			err:      fmt.Errorf("read tcp 127.0.0.1:2202->127.0.0.1:33112: read: connection reset by peer"),
+			expected: true,
+		},
+		{
+			name:     "wrapped io.EOF is pre-version-exchange",
+			err:      fmt.Errorf("transport: %w", io.EOF),
+			expected: true,
+		},
+		{
+			name:     "SSH handshake failure is NOT pre-version-exchange",
+			err:      fmt.Errorf("ssh: handshake failed: ssh: no common algorithm for host key; client offered: [ssh-ed25519]"),
+			expected: false,
+		},
+		{
+			name:     "auth rejection is NOT pre-version-exchange",
+			err:      fmt.Errorf("ssh: unable to authenticate, attempted methods [publickey], no supported methods remain"),
+			expected: false,
+		},
+	}
+	for _, tc := range cases {
+		test.Run(tc.name, func(t *testing.T) {
+			assertEqual(t, tc.name, tc.expected, isPreVersionExchangeDisconnect(tc.err))
+		})
+	}
+}
+
 func TestMain(m *testing.M) {
 	// Replace the default logger with a no-op logger
 	slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil)))
