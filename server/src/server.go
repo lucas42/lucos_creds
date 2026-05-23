@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"os"
@@ -21,11 +22,27 @@ const (
 )
 var validationError *ValidationError
 
+// isPreVersionExchangeDisconnect returns true when a connection closed before
+// the SSH version string was exchanged — consistent with TCP-only health probes
+// (e.g. `nc -z`) that never speak SSH protocol.  These are benign and logged at
+// DEBUG.  Real handshake failures (wrong algorithm, auth rejected, etc.) are not
+// matched here and continue to be logged at WARN.
+func isPreVersionExchangeDisconnect(err error) bool {
+	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+		return true
+	}
+	return strings.Contains(err.Error(), "connection reset by peer")
+}
+
 func handleSshConnection(connection net.Conn, config *ssh.ServerConfig, datastore Datastore) {
 	slog.Debug("New connection received")
 	sshConnection, channels, globalRequests, err := ssh.NewServerConn(connection, config)
 	if err != nil {
-		slog.Warn("Failed to create a new server connection", slog.Any("error", err))
+		if isPreVersionExchangeDisconnect(err) {
+			slog.Debug("Connection closed before SSH version exchange", slog.Any("error", err))
+		} else {
+			slog.Warn("Failed to create a new server connection", slog.Any("error", err))
+		}
 		return
 	}
 	slog.Debug("Login", "user", sshConnection.User())
