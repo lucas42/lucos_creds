@@ -9,7 +9,10 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"time"
 )
+
+var loganneHTTPClient = &http.Client{Timeout: 5 * time.Second}
 
 type LoganneInterface interface {
 	postCredentialUpdated(string, string, string)
@@ -46,7 +49,7 @@ func (loganne Loganne) post(eventType string, humanReadable string, credential N
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", os.Getenv("SYSTEM"))
-	response, err := http.DefaultClient.Do(req)
+	response, err := loganneHTTPClient.Do(req)
 	if err != nil {
 		slog.Warn("Error occured whilst posting to Loganne", slog.Any("error", err))
 		return
