@@ -14,6 +14,12 @@ session.headers.update({
 	"User-Agent": "lucos_creds_configy_sync",
 })
 
+# The only credentials this sync writes, and the only environments it writes them to.
+# Auto-cleanup is deliberately scoped to exactly this set: it can only ever delete a
+# credential that the sync itself created. See docs/adr/0001-auto-clean-removed-system-credentials.md
+SYNC_MANAGED_KEYS = ("PORT", "APP_ORIGIN")
+SYNC_MANAGED_ENVIRONMENTS = ("development", "production")
+
 def sshExec(command):
 	try:
 		output = subprocess.run([f"ssh -p 2202 lucos_creds \"{command.replace('"','\\"')}\""], shell=True, check=True, timeout=1, text=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
@@ -50,6 +56,31 @@ def getCredential(system, environment, key):
 		raise Exception(f"Credential {key} isn't of type 'config'. Need to add it to `config_keys` in server/src/storage.go")
 	return cred_data['value']
 
+def getAllSystemEnvironments():
+	raw_json = sshExec("ls")
+	return json.loads(raw_json)
+
+def cleanupRemovedSystems(current_system_ids):
+	"""Delete the sync-managed credentials (PORT/APP_ORIGIN) for any system/environment
+	pair still in the credential store but no longer present in lucos_configy.
+
+	Scope is deliberately narrow — only the keys this sync writes (SYNC_MANAGED_KEYS) and
+	only the environments it writes them to (SYNC_MANAGED_ENVIRONMENTS). Manually-set
+	credentials (API keys, linked-credential secrets) and any other environment are never
+	touched, so a system that exists only in scripts.yaml/components.yaml, a third-party
+	stub, or a test fixture cannot be affected. updateCredential() no-ops when the key is
+	already absent, so this only deletes (and only emits a credentialDeleted event) when
+	there's genuinely an orphaned sync-managed key to remove."""
+	for entry in getAllSystemEnvironments():
+		system = entry['system']
+		environment = entry['environment']
+		if system in current_system_ids:
+			continue
+		if environment not in SYNC_MANAGED_ENVIRONMENTS:
+			continue
+		for key in SYNC_MANAGED_KEYS:
+			updateCredential(system, environment, key, None)
+
 if __name__ == "__main__":
 	try:
 		print(f"[{datetime.datetime.now()}] Syncing values from lucos_configy...")
@@ -66,6 +97,10 @@ if __name__ == "__main__":
 			else:
 				updateCredential(system['id'], 'development', 'APP_ORIGIN', None)
 				updateCredential(system['id'], 'production', 'APP_ORIGIN', None)
+
+		# Remove sync-managed credentials left behind by systems no longer in configy
+		current_system_ids = {system['id'] for system in systems}
+		cleanupRemovedSystems(current_system_ids)
 
 		updateScheduleTracker(success=True, job_name="configy_sync", frequency=1*60*60)
 		print(f"[{datetime.datetime.now()}] Sync Complete")
