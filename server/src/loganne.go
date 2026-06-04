@@ -17,6 +17,7 @@ var loganneHTTPClient = &http.Client{Timeout: 5 * time.Second}
 type LoganneInterface interface {
 	postCredentialUpdated(string, string, string)
 	postCredentialDeleted(string, string, string)
+	postScopeUpdated(string, string, string, string)
 }
 
 type Loganne struct {
@@ -76,4 +77,10 @@ func (loganne Loganne) postCredentialDeleted(system string, environment string, 
 	credential := NormalisedCredential{ System: system, Environment: environment, Key: key }
 	loganneMessage := fmt.Sprintf("Credential %s deleted from %s (%s)", credential.Key, credential.System, credential.Environment)
 	loganne.post("credentialDeleted", loganneMessage, credential, "")
+}
+
+func (loganne Loganne) postScopeUpdated(clientSystem string, clientEnvironment string, serverSystem string, serverEnvironment string) {
+	credential := NormalisedCredential{ System: serverSystem, Environment: serverEnvironment, Key: "CLIENT_KEYS" }
+	loganneMessage := fmt.Sprintf("Scope for %s:%s updated in CLIENT_KEYS for %s (%s)", clientSystem, clientEnvironment, serverSystem, serverEnvironment)
+	loganne.post("credentialScopeUpdated", loganneMessage, credential, "")
 }

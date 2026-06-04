@@ -203,11 +203,12 @@ app.get('/update-linked-credential', catchErrors(async (req, res) => {
 		systems[system] = true;
 		environments[environment] = true;
 	});
-	let { clientsystem, clientenvironment, serversystem, serverenvironment, error } = req.query
+	let { clientsystem, clientenvironment, serversystem, serverenvironment, scope, error } = req.query
 	if (!(clientsystem in systems)) clientsystem = null;
 	if (!(clientenvironment in environments)) clientenvironment = null;
 	if (!(serversystem in systems)) serversystem = null;
 	if (!(serverenvironment in environments)) serverenvironment = null;
+	scope = scope || '';
 	const availableSystems = Object.keys(systems);
 	availableSystems.sort();
 	const availableEnvironments = Object.keys(environments);
@@ -219,18 +220,20 @@ app.get('/update-linked-credential', catchErrors(async (req, res) => {
 		clientenvironment,
 		serversystem,
 		serverenvironment,
+		scope,
 		error,
 	});
 }));
 app.post('/update-linked-credential', catchErrors(async (req, res) => {
-	const { clientsystem, clientenvironment, serversystem, serverenvironment } = req.body;
+	const { clientsystem, clientenvironment, serversystem, serverenvironment, scope } = req.body;
 	if (!clientsystem || !clientenvironment || !serversystem || !serverenvironment) {
 		const params = new URLSearchParams(req.body);
 		params.append('error', "All fields are required");
 		res.redirect(303, '/update-linked-credential?'+params.toString());
 		return;
 	}
-	await sshExec(`${clientsystem}/${clientenvironment} => ${serversystem}/${serverenvironment}`);
+	const serverEnvWithScope = scope ? `${serverenvironment}|${scope}` : serverenvironment;
+	await sshExec(`${clientsystem}/${clientenvironment} => ${serversystem}/${serverEnvWithScope}`);
 	res.redirect(303, `/system/${serversystem}/${serverenvironment}/CLIENT_KEYS`);
 }));
 

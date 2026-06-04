@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/cipher"
 	"crypto/rand"
+	"database/sql"
 	"fmt"
 	"io"
 	"log/slog"
@@ -53,10 +54,14 @@ func initDatastore(datastorePath string, dataKeyPath string, loganne LoganneInte
 			"serversystem" TEXT NOT NULL,
 			"serverenvironment" TEXT NOT NULL,
 			"encryptedvalue" BLOB,
+			"scope" TEXT,
 			CONSTRAINT credential_unique UNIQUE (clientsystem, clientenvironment, serversystem)
 		);
 		`
 		datastore.db.MustExec(sqlStmt)
+	} else if !datastore.ColumnExists("linked_credential", "scope") {
+		slog.Info("Migrating table `linked_credential`: adding scope column")
+		datastore.db.MustExec(`ALTER TABLE linked_credential ADD COLUMN scope TEXT;`)
 	}
 
 	return datastore
@@ -68,6 +73,16 @@ func (store Datastore) TableExists(tablename string) (found bool) {
 		panic(err)
 	}
 	return
+}
+
+func (store Datastore) ColumnExists(tablename string, columnname string) bool {
+	var count int
+	// tablename is always a literal constant from internal calls — safe to interpolate
+	err := store.db.Get(&count, fmt.Sprintf("SELECT COUNT(*) FROM pragma_table_info('%s') WHERE name = ?", tablename), columnname)
+	if err != nil {
+		panic(err)
+	}
+	return count > 0
 }
 
 /**
@@ -99,12 +114,13 @@ type SimpleCredential struct {
  * Note plain values are never stored
  */
 type LinkedCredential struct {
-	ClientSystem      string `json:"client_system"`
-	ClientEnvironment string `json:"client_environment"`
-	ServerSystem      string `json:"server_system"`
-	ServerEnvironment string `json:"server_environment"`
-	EncryptedValue    []byte `json:"value_encrypted,omitempty"`
-	PlainValue        string `json:"value_plain,omitempty"`
+	ClientSystem      string         `json:"client_system"`
+	ClientEnvironment string         `json:"client_environment"`
+	ServerSystem      string         `json:"server_system"`
+	ServerEnvironment string         `json:"server_environment"`
+	EncryptedValue    []byte         `json:"value_encrypted,omitempty"`
+	PlainValue        string         `json:"value_plain,omitempty"`
+	Scope             sql.NullString `db:"scope" json:"scope,omitempty"`
 }
 
 type SystemEnvironment struct {
@@ -251,7 +267,11 @@ func (datastore Datastore) getServerCredentialsBySystemEnvironment(system string
 		if plainValue != "" {
 			plainValue = plainValue + ";"
 		}
-		plainValue += fmt.Sprintf("%s:%s=%s", credential.ClientSystem, credential.ClientEnvironment, credential.PlainValue)
+		entry := fmt.Sprintf("%s:%s=%s", credential.ClientSystem, credential.ClientEnvironment, credential.PlainValue)
+		if credential.Scope.Valid && credential.Scope.String != "" {
+			entry += "|" + credential.Scope.String
+		}
+		plainValue += entry
 	}
 	normalisedCredentials = []NormalisedCredential{}
 	if plainValue != "" {
@@ -321,24 +341,28 @@ func (datastore Datastore) updateCredential(system string, environment string, k
 	return
 }
 
-func (datastore Datastore) updateLinkedCredential(client_system string, client_environment string, server_system string, server_environment string) (err error) {
+func (datastore Datastore) updateLinkedCredential(client_system string, client_environment string, server_system string, server_environment string, scope string) (err error) {
 	credential := LinkedCredential{}
 	credential.ClientSystem = client_system
 	credential.ClientEnvironment = client_environment
 	credential.ServerSystem = server_system
 	credential.ServerEnvironment = server_environment
+	credential.Scope = sql.NullString{String: scope, Valid: scope != ""}
 	credential.EncryptedValue, err = generateNewEncryptedValue(datastore.dataBlockCipher)
 	if err != nil {
 		return
 	}
 
-	_, err = datastore.db.NamedExec("REPLACE INTO linked_credential(clientsystem, clientenvironment, serversystem, serverenvironment, encryptedvalue) values(:clientsystem, :clientenvironment, :serversystem, :serverenvironment, :encryptedvalue)", credential)
+	_, err = datastore.db.NamedExec("REPLACE INTO linked_credential(clientsystem, clientenvironment, serversystem, serverenvironment, encryptedvalue, scope) values(:clientsystem, :clientenvironment, :serversystem, :serverenvironment, :encryptedvalue, :scope)", credential)
 	if err != nil {
 		return
 	}
 	slog.Info("Updated Linked Credential", "credential", credential)
 	datastore.loganne.postCredentialUpdated(credential.ClientSystem, credential.ClientEnvironment, strings.ToUpper("KEY_"+credential.ServerSystem))
 	datastore.loganne.postCredentialUpdated(credential.ServerSystem, credential.ServerEnvironment, strings.ToUpper("CLIENT_KEYS"))
+	if credential.Scope.Valid && credential.Scope.String != "" {
+		datastore.loganne.postScopeUpdated(credential.ClientSystem, credential.ClientEnvironment, credential.ServerSystem, credential.ServerEnvironment)
+	}
 	return
 }
 

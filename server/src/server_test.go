@@ -366,6 +366,37 @@ func TestCreateLinkedCredentialOverSSH(test *testing.T) {
 
 	assertScpCommandReturnsContent(test, "lucos_test_server/production/.env", "CLIENT_KEYS=\"lucos_test_client:production="+sharedCredential+"\"\nENVIRONMENT=\"production\"\nOTHERKEY=\"green\"\nSYSTEM=\"lucos_test_server\"\n")
 }
+func TestCreateLinkedCredentialWithScopeOverSSH(test *testing.T) {
+	defer startTestServer(test)()
+
+	assertSshCommandReturnsOutput(test, "lucos_test_client/production => lucos_test_server/production|photos:add", "")
+
+	testFileName := "test_client_scope.env"
+	defer os.Remove(testFileName)
+	cmd := exec.Command(
+		"/usr/bin/scp",
+		"-s",
+		"-o BatchMode=yes",
+		"-o StrictHostKeyChecking=no",
+		"-o UserKnownHostsFile=/dev/null",
+		"-o LogLevel ERROR",
+		"-i"+TEST_CLIENTKEYPATH,
+		"-P "+TEST_PORT,
+		TEST_USER+"@localhost:lucos_test_client/production/.env",
+		testFileName,
+	)
+	err := cmd.Run()
+	assertNoError(test, err)
+	contents, err := os.ReadFile(testFileName)
+	assertNoError(test, err)
+	keyvalues := strings.Split(string(contents), "\n")
+	keyvalueparts := strings.Split(keyvalues[1], "=")
+	assertEqual(test, "Linked Credential not set properly for client", "KEY_LUCOS_TEST_SERVER", keyvalueparts[0])
+	sharedCredential := strings.Trim(keyvalueparts[1], "\"")
+
+	assertScpCommandReturnsContent(test, "lucos_test_server/production/.env", "CLIENT_KEYS=\"lucos_test_client:production="+sharedCredential+"|photos:add\"\nENVIRONMENT=\"production\"\nSYSTEM=\"lucos_test_server\"\n")
+}
+
 func TestDeleteCredentialOverSSH(test *testing.T) {
 	defer startTestServer(test)()
 

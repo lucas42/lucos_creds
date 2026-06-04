@@ -44,6 +44,13 @@ func (mock MockLoganne) postCredentialDeleted(system string, environment string,
 	lastLoganneKey = key
 	loganneRequestCount++
 }
+func (mock MockLoganne) postScopeUpdated(clientSystem string, clientEnvironment string, serverSystem string, serverEnvironment string) {
+	lastLoganneType = "credentialScopeUpdated"
+	lastLoganneSystem = serverSystem
+	lastLoganneEnvironment = serverEnvironment
+	lastLoganneKey = "CLIENT_KEYS"
+	loganneRequestCount++
+}
 
 func TestLoganneEvent(test *testing.T) {
 	listener, err := net.Listen("tcp", ":7999")
