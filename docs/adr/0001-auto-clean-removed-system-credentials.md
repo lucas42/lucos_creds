@@ -14,26 +14,21 @@ A prep audit (issue #333) enumerated every system holding credentials and diffed
 
 ## Decision
 
-**The sync deletes only what the sync created — "sync-manages-it, sync-cleans-it".**
+**The sync deletes only what the store reports as auto-managed (`type == config`) — "sync-manages-it, sync-cleans-it".**
 
-After the existing write loop, `sync.py` enumerates the store (`ls`) and, for every `(system, environment)` pair where:
-
-- the `environment` is one the sync writes to (`development` or `production`), **and**
-- the `system` is no longer present in the configy systems list,
-
-it deletes the `PORT` and `APP_ORIGIN` keys for that pair. Deletion reuses the existing `updateCredential(system, environment, key, None)` path, which is a no-op when the key is already absent — so it only deletes (and only emits a `credentialDeleted` event) when there is genuinely an orphaned sync-managed key.
-
-The scope is fixed by two constants (`SYNC_MANAGED_KEYS = (PORT, APP_ORIGIN)`, `SYNC_MANAGED_ENVIRONMENTS = (development, production)`) — the same set the sync writes.
+After the existing write loop, `sync.py` enumerates the store (`ls`) and, for every `(system, environment)` pair whose `system` is no longer present in the configy systems list, it lists that pair's credentials (`ls {system}/{environment}`) and deletes any whose **type is `config`**. Deletion reuses the existing `updateCredential(system, environment, key, None)` path, which is a no-op when the key is already absent — so it only deletes (and only emits a `credentialDeleted` event) when there is genuinely an orphaned auto-managed credential.
 
 ### Why this boundary is correct
 
-The sync *writes* exactly `PORT`/`APP_ORIGIN` in `development`/`production`. If the cleanup *deletes* exactly that same set, then **by construction it can never touch a credential the sync did not create**:
+`type == config` is **not** a second list maintained in `sync.py`. The store itself assigns that type, in exactly one place (`config_keys` in `server/src/storage.go`, currently `PORT`/`APP_ORIGIN`), to the credentials it auto-manages and hides from UI editing. Those are precisely the credentials this sync writes. By keying the cleanup off that type rather than re-declaring the key list locally, **the write set and the delete set cannot drift** — whatever the store calls `config` is what gets cleaned up, and adding a future auto-managed key (to `config_keys` and the write loop) needs no change here.
 
-- Category-A active systems (registered in `scripts.yaml`/`components.yaml`) hold only manual keys and have no `PORT`/`APP_ORIGIN`, so they are never in scope — no allowlist or exemption is needed.
-- Third-party stubs (`external_calendar`) and test fixtures hold only manual keys — never in scope.
-- Other environments (`deploy`, `publish`, `test1`, `test2`) are never in scope.
+Because only `config`-typed credentials are ever deleted, the cleanup **by construction cannot touch a credential the sync did not create**:
 
-The scope boundary aligns exactly with "what the sync put there," which is the cleanest possible invariant and directly addresses the `comhra` failure mode (orphaned `PORT`/`APP_ORIGIN` after a `systems.yaml` removal) and nothing more.
+- Category-A active systems (registered in `scripts.yaml`/`components.yaml`) hold only manually-set (`simple`/`client`/`server`) credentials — no `config` type — so they are never in scope; no allowlist or exemption is needed.
+- Third-party stubs (`external_calendar`) and test fixtures hold only manual credentials — never in scope.
+- `built-in` credentials (e.g. `SYSTEM`) are computed, not stored, and are never `config`-typed — never in scope.
+
+The boundary aligns exactly with "what the store auto-manages," which is the cleanest possible invariant and directly addresses the `comhra` failure mode (orphaned `PORT`/`APP_ORIGIN` after a `systems.yaml` removal) and nothing more. Note the cleanup is **not** restricted by environment: `config`-typed credentials only exist where the sync wrote them (development/production), and they are losslessly reconstructable everywhere, so an environment filter would be a redundant third hardcoded list — deliberately omitted for the same drift-avoidance reason.
 
 ### No grace period
 
@@ -41,26 +36,28 @@ Deletion is **immediate** — there is no "absent for N runs" grace period and n
 
 ### No exemption allowlist
 
-Because the scope is `PORT`/`APP_ORIGIN`-only, manual-credential systems are never candidates for deletion, so there is nothing to exempt. An earlier "permanent exemption for `external_calendar`" framing was dropped: the narrow scope makes it moot.
+Because only `config`-typed credentials are candidates for deletion, manual-credential systems are never in scope, so there is nothing to exempt. An earlier "permanent exemption for `external_calendar`" framing was dropped: the narrow scope makes it moot.
 
 ## Consequences
 
 ### Positive
 
 - **The `comhra` orphan class is eliminated.** Decommissioning a system from configy now removes its sync-managed credentials automatically on the next hourly run — `repo-archival.md` Phase 2d's "orphaned configy-sync-managed creds" gap is closed.
-- **Structurally safe.** The cleanup cannot delete a manually-set credential, a credential in an unmanaged environment, or a credential for a system registered in `scripts.yaml`/`components.yaml`. Safety is a property of the scope, not of a maintained allowlist that could drift.
-- **No new state, minimal code.** The reconcile stays stateless; the change is one enumeration call plus a guarded loop reusing the proven `updateCredential(..., None)` delete path.
+- **Structurally safe with no second source of truth.** The cleanup cannot delete a manually-set credential or a built-in. Safety is a property of the `config` type — defined once in `storage.go` — not of a list duplicated in `sync.py` that could silently fall out of step with the write loop.
+- **No new state, minimal code.** The reconcile stays stateless; the change is two enumeration calls (store-wide, then per orphaned pair) plus a guarded loop reusing the proven `updateCredential(..., None)` delete path.
 
 ### Negative
 
-- **Manual credentials still require manual decommissioning.** Deleting a decommissioned system's API keys / linked-credential secrets remains a human step in the archival walk (`repo-archival.md`). This ADR does **not** automate that — by design, because auto-deleting manual secrets is exactly the high-risk action the scope is chosen to avoid. If that automation is ever wanted, it would need the three-registry reconciliation (`systems.yaml` + `scripts.yaml` + `components.yaml`) rather than the `systems.yaml`-only check used here.
+- **One extra `ls` call per orphaned system/environment pair.** Reading each removed pair's credential types costs an SSH round-trip beyond the store-wide enumeration. This is bounded by the number of *removed* systems (normally zero), so the cost is negligible.
+- **Manual credentials still require manual decommissioning.** Deleting a decommissioned system's API keys / linked-credential secrets remains a human step in the archival walk (`repo-archival.md`). This ADR does **not** automate that — by design, because auto-deleting manual secrets is exactly the high-risk action the scope is chosen to avoid. If that automation is ever wanted, it would need the three-registry reconciliation (`systems.yaml` + `scripts.yaml` + `components.yaml`).
 - **Cleanup depends on the store enumeration (`ls`) succeeding.** It runs inside the sync's try/except, so a failure marks the sync run as failed via the schedule tracker (consistent with the rest of the sync).
 
 ## Alternatives considered
 
-- **Key cleanup off `systems.yaml` membership alone, deleting all of a removed system's credentials.** Rejected — this is the dangerous design. It would wipe the manual keys of every `scripts.yaml`/`components.yaml` system, third-party stub, and test fixture. The audit in #333 exists precisely to demonstrate this.
+- **Maintain a managed-keys list in `sync.py` (e.g. `SYNC_MANAGED_KEYS = (PORT, APP_ORIGIN)`) and delete those keys directly.** This was the PR's first cut. It works and has an identical blast radius (the keys *are* the `config_keys`), but it introduces a **third** copy of "which keys are auto-managed" — alongside `config_keys` in `storage.go` and the write loop in `sync.py` — that can drift: add a future managed key to `storage.go`/the write loop and forget this list, and orphans of that key would silently never be cleaned up. Rejected in favour of deriving the set from the store's `config` type (lucas42's review on PR #353), which removes the drift surface at the cost of one extra `ls` per orphaned pair. The complexity-vs-drift trade-off came down on the side of no duplication.
+- **Key cleanup off `systems.yaml` membership alone, deleting *all* of a removed system's credentials.** Rejected — this is the dangerous design. It would wipe the manual keys of every `scripts.yaml`/`components.yaml` system, third-party stub, and test fixture. The audit in #333 exists precisely to demonstrate this.
 - **Add a grace period (delete only after N consecutive missing runs) or an explicit decom-marker in configy.** Rejected — adds persisted state to a stateless reconcile, slows decommissioning, and defends a self-inflicted, self-healing window over losslessly-reconstructable values. Disproportionate to the failure mode.
-- **Maintain an explicit exemption allowlist for legitimate non-`systems.yaml` systems.** Rejected — unnecessary under the `PORT`/`APP_ORIGIN`-only scope (those systems are never in scope) and a maintenance burden that would silently rot.
+- **Maintain an explicit exemption allowlist for legitimate non-`systems.yaml` systems.** Rejected — unnecessary when only `config`-typed credentials are in scope (those systems have none), and a maintenance burden that would silently rot.
 
 ## Follow-ups
 

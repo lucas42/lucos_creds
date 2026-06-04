@@ -14,12 +14,6 @@ session.headers.update({
 	"User-Agent": "lucos_creds_configy_sync",
 })
 
-# The only credentials this sync writes, and the only environments it writes them to.
-# Auto-cleanup is deliberately scoped to exactly this set: it can only ever delete a
-# credential that the sync itself created. See docs/adr/0001-auto-clean-removed-system-credentials.md
-SYNC_MANAGED_KEYS = ("PORT", "APP_ORIGIN")
-SYNC_MANAGED_ENVIRONMENTS = ("development", "production")
-
 def sshExec(command):
 	try:
 		output = subprocess.run([f"ssh -p 2202 lucos_creds \"{command.replace('"','\\"')}\""], shell=True, check=True, timeout=1, text=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
@@ -60,21 +54,26 @@ def getAllSystemEnvironments():
 	raw_json = sshExec("ls")
 	return json.loads(raw_json)
 
-def cleanupRemovedSystems(current_system_ids):
-	"""Delete the sync-managed credentials (PORT/APP_ORIGIN) for any system/environment
-	pair still in the credential store but no longer present in lucos_configy.
+def getCredentials(system, environment):
+	raw_json = sshExec(f"ls {system}/{environment}")
+	return json.loads(raw_json)
 
-	Scope is deliberately narrow — only the keys this sync writes (SYNC_MANAGED_KEYS) and
-	only the environments it writes them to (SYNC_MANAGED_ENVIRONMENTS). Manually-set
-	credentials (API keys, linked-credential secrets) and any other environment are never
-	touched, so a system that exists only in scripts.yaml/components.yaml, a third-party
-	stub, or a test fixture cannot be affected. updateCredential() no-ops when the key is
-	already absent, so this only deletes (and only emits a credentialDeleted event) when
-	there's genuinely an orphaned sync-managed key to remove."""
+def cleanupRemovedSystems(current_system_ids):
+	"""Delete the auto-managed credentials for any system no longer present in lucos_configy.
+
+	A credential is auto-managed iff the store reports its type as 'config' — that type is
+	defined in one place (config_keys in server/src/storage.go, currently PORT/APP_ORIGIN)
+	and is exactly the set this sync writes. Keying the cleanup off that type rather than a
+	second hardcoded list here means the two can't drift: whatever the store calls 'config'
+	is what gets cleaned up. Every other credential type (simple manual keys, linked-credential
+	client/server keys, built-ins) is left untouched, so a system registered only in
+	scripts.yaml/components.yaml, a third-party stub, or a test fixture cannot be affected —
+	none of them has a config-typed credential. updateCredential() no-ops when the key is
+	already absent, so a credentialDeleted event only fires for a genuine orphan."""
 	# An empty configy response (200 OK, body []) is indistinguishable from
-	# "every system was removed". Treating it as the latter would delete PORT/APP_ORIGIN
-	# for every system in the store, so abort loudly instead — the sync run fails and the
-	# anomaly surfaces via the schedule tracker rather than wiping live credentials.
+	# "every system was removed". Treating it as the latter would delete the config-typed
+	# credentials for every system in the store, so abort loudly instead — the sync run fails
+	# and the anomaly surfaces via the schedule tracker rather than wiping live credentials.
 	if not current_system_ids:
 		raise Exception("configy returned no systems — aborting cleanup to avoid deleting every system's credentials")
 	for entry in getAllSystemEnvironments():
@@ -82,10 +81,9 @@ def cleanupRemovedSystems(current_system_ids):
 		environment = entry['environment']
 		if system in current_system_ids:
 			continue
-		if environment not in SYNC_MANAGED_ENVIRONMENTS:
-			continue
-		for key in SYNC_MANAGED_KEYS:
-			updateCredential(system, environment, key, None)
+		for key, credential in getCredentials(system, environment).items():
+			if credential.get('type') == 'config':
+				updateCredential(system, environment, key, None)
 
 if __name__ == "__main__":
 	try:
