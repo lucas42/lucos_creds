@@ -71,6 +71,12 @@ def cleanupRemovedSystems(current_system_ids):
 	stub, or a test fixture cannot be affected. updateCredential() no-ops when the key is
 	already absent, so this only deletes (and only emits a credentialDeleted event) when
 	there's genuinely an orphaned sync-managed key to remove."""
+	# An empty configy response (200 OK, body []) is indistinguishable from
+	# "every system was removed". Treating it as the latter would delete PORT/APP_ORIGIN
+	# for every system in the store, so abort loudly instead — the sync run fails and the
+	# anomaly surfaces via the schedule tracker rather than wiping live credentials.
+	if not current_system_ids:
+		raise Exception("configy returned no systems — aborting cleanup to avoid deleting every system's credentials")
 	for entry in getAllSystemEnvironments():
 		system = entry['system']
 		environment = entry['environment']
