@@ -225,8 +225,13 @@ func handleSshConnection(connection net.Conn, config *ssh.ServerConfig, datastor
 								slog.Debug("Accepting exec linked credential request", "client", clientParts, "server", serverParts)
 								err := datastore.updateLinkedCredential(clientParts[0], clientParts[1], serverParts[0], serverEnvironment, scope)
 								if err != nil {
-									exitStatus.code = StatusInternalError
-									slog.Warn("Failed to update linked credential", slog.Any("error", err))
+									if (errors.As(err, &validationError)) {
+										exitStatus.code = StatusValidationError
+										channel.Write([]byte(err.Error()+"\n"))
+									} else {
+										exitStatus.code = StatusInternalError
+										slog.Warn("Failed to update linked credential", slog.Any("error", err))
+									}
 								}
 								}
 							}

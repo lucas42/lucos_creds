@@ -342,6 +342,20 @@ func (datastore Datastore) updateCredential(system string, environment string, k
 }
 
 func (datastore Datastore) updateLinkedCredential(client_system string, client_environment string, server_system string, server_environment string, scope string) (err error) {
+	// Validate scope: characters that break CLIENT_KEYS parsing must not appear in scope names.
+	// Note: ':' is intentionally permitted — the agreed {resource}:{action} naming convention uses it.
+	for _, reserved := range []string{"|", ";", "="} {
+		if strings.Contains(scope, reserved) {
+			err = &ValidationError{"scope must not contain reserved characters: | ; ="}
+			return
+		}
+	}
+
+	// Check whether the existing credential already has a scope, so we can audit scope removal
+	var existingCredential LinkedCredential
+	existingErr := datastore.db.Get(&existingCredential, "SELECT * FROM linked_credential WHERE clientsystem = $1 AND clientenvironment = $2 AND serversystem = $3", client_system, client_environment, server_system)
+	hadScope := existingErr == nil && existingCredential.Scope.Valid && existingCredential.Scope.String != ""
+
 	credential := LinkedCredential{}
 	credential.ClientSystem = client_system
 	credential.ClientEnvironment = client_environment
@@ -360,7 +374,9 @@ func (datastore Datastore) updateLinkedCredential(client_system string, client_e
 	slog.Info("Updated Linked Credential", "credential", credential)
 	datastore.loganne.postCredentialUpdated(credential.ClientSystem, credential.ClientEnvironment, strings.ToUpper("KEY_"+credential.ServerSystem))
 	datastore.loganne.postCredentialUpdated(credential.ServerSystem, credential.ServerEnvironment, strings.ToUpper("CLIENT_KEYS"))
-	if credential.Scope.Valid && credential.Scope.String != "" {
+	// Fire scope event when scope is set OR when scope was previously set and is now being cleared
+	newScopeSet := credential.Scope.Valid && credential.Scope.String != ""
+	if newScopeSet || hadScope {
 		datastore.loganne.postScopeUpdated(credential.ClientSystem, credential.ClientEnvironment, credential.ServerSystem, credential.ServerEnvironment)
 	}
 	return

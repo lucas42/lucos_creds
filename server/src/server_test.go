@@ -397,6 +397,13 @@ func TestCreateLinkedCredentialWithScopeOverSSH(test *testing.T) {
 	assertScpCommandReturnsContent(test, "lucos_test_server/production/.env", "CLIENT_KEYS=\"lucos_test_client:production="+sharedCredential+"|photos:add\"\nENVIRONMENT=\"production\"\nSYSTEM=\"lucos_test_server\"\n")
 }
 
+func TestCreateLinkedCredentialWithInvalidScopeOverSSH(test *testing.T) {
+	defer startTestServer(test)()
+
+	// Scope containing | would corrupt CLIENT_KEYS parsing — must be rejected
+	assertSshCommandReturnsError(test, "lucos_test_client/production => lucos_test_server/production|photos:add|read", StatusValidationError, "Validation Error: scope must not contain reserved characters: | ; =\n")
+}
+
 func TestDeleteCredentialOverSSH(test *testing.T) {
 	defer startTestServer(test)()
 
