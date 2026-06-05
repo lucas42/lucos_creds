@@ -366,6 +366,73 @@ func TestCreateLinkedCredentialOverSSH(test *testing.T) {
 
 	assertScpCommandReturnsContent(test, "lucos_test_server/production/.env", "CLIENT_KEYS=\"lucos_test_client:production="+sharedCredential+"\"\nENVIRONMENT=\"production\"\nOTHERKEY=\"green\"\nSYSTEM=\"lucos_test_server\"\n")
 }
+func TestCreateLinkedCredentialWithScopeOverSSH(test *testing.T) {
+	defer startTestServer(test)()
+
+	assertSshCommandReturnsOutput(test, "lucos_test_client/production => lucos_test_server/production|photos:add", "")
+
+	testFileName := "test_client_scope.env"
+	defer os.Remove(testFileName)
+	cmd := exec.Command(
+		"/usr/bin/scp",
+		"-s",
+		"-o BatchMode=yes",
+		"-o StrictHostKeyChecking=no",
+		"-o UserKnownHostsFile=/dev/null",
+		"-o LogLevel ERROR",
+		"-i"+TEST_CLIENTKEYPATH,
+		"-P "+TEST_PORT,
+		TEST_USER+"@localhost:lucos_test_client/production/.env",
+		testFileName,
+	)
+	err := cmd.Run()
+	assertNoError(test, err)
+	contents, err := os.ReadFile(testFileName)
+	assertNoError(test, err)
+	keyvalues := strings.Split(string(contents), "\n")
+	keyvalueparts := strings.Split(keyvalues[1], "=")
+	assertEqual(test, "Linked Credential not set properly for client", "KEY_LUCOS_TEST_SERVER", keyvalueparts[0])
+	sharedCredential := strings.Trim(keyvalueparts[1], "\"")
+
+	assertScpCommandReturnsContent(test, "lucos_test_server/production/.env", "CLIENT_KEYS=\"lucos_test_client:production="+sharedCredential+"|photos:add\"\nENVIRONMENT=\"production\"\nSYSTEM=\"lucos_test_server\"\n")
+}
+
+func TestLsShowsScopeOnClientCredential(test *testing.T) {
+	defer startTestServer(test)()
+
+	assertSshCommandReturnsOutput(test, "lucos_test_client/production => lucos_test_server/production|photos:add", "")
+
+	// The scope and server_environment should appear in the ls output for the client credential so the UI can read them back
+	output := ""
+	cmd := exec.Command(
+		"/usr/bin/ssh",
+		"-o BatchMode=yes",
+		"-o StrictHostKeyChecking=no",
+		"-o UserKnownHostsFile=/dev/null",
+		"-o LogLevel ERROR",
+		"-i"+TEST_CLIENTKEYPATH,
+		"-p "+TEST_PORT,
+		TEST_USER+"@localhost",
+		"ls lucos_test_client/production/KEY_LUCOS_TEST_SERVER",
+	)
+	stdout, err := cmd.Output()
+	assertNoError(test, err)
+	output = string(stdout)
+	if !strings.Contains(output, `"scope":"photos:add"`) {
+		test.Errorf("Expected ls output to contain scope, got: %s", output)
+	}
+	if !strings.Contains(output, `"server_environment":"production"`) {
+		test.Errorf("Expected ls output to contain server_environment, got: %s", output)
+	}
+}
+
+func TestCreateLinkedCredentialWithInvalidScopeOverSSH(test *testing.T) {
+	defer startTestServer(test)()
+
+	// Scope containing | (after the initial | env/scope delimiter) is not in the allowlist — must be rejected
+	assertSshCommandReturnsError(test, "lucos_test_client/production => lucos_test_server/production|photos:add|read", StatusValidationError, "Validation Error: scope contains invalid character '|': only alphanumeric characters, colons and commas are permitted\n")
+}
+
 func TestDeleteCredentialOverSSH(test *testing.T) {
 	defer startTestServer(test)()
 

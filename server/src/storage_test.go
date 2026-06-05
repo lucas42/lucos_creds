@@ -50,7 +50,7 @@ func TestLinkedCredentials(test *testing.T) {
 	defer os.Remove(datastorePath)
 	defer os.Remove(dataKeyPath)
 	datastore := initDatastore(datastorePath, dataKeyPath, MockLoganne{})
-	datastore.updateLinkedCredential("lucos_test_client", "testing", "lucos_test_server", "testing")
+	datastore.updateLinkedCredential("lucos_test_client", "testing", "lucos_test_server", "testing", "")
 	clientCreds, err := datastore.getAllCredentialsBySystemEnvironment("lucos_test_client", "testing")
 	assertNoError(test, err)
 	clientKey := clientCreds["KEY_LUCOS_TEST_SERVER"]
@@ -66,9 +66,9 @@ func TestMultipleLinkedCredentials(test *testing.T) {
 	defer os.Remove(datastorePath)
 	defer os.Remove(dataKeyPath)
 	datastore := initDatastore(datastorePath, dataKeyPath, MockLoganne{})
-	datastore.updateLinkedCredential("lucos_test_client1", "testing", "lucos_test_server", "testing")
-	datastore.updateLinkedCredential("lucos_test_client2", "staging", "lucos_test_server", "testing")
-	datastore.updateLinkedCredential("lucos_test_client3", "development", "lucos_test_server", "testing")
+	datastore.updateLinkedCredential("lucos_test_client1", "testing", "lucos_test_server", "testing", "")
+	datastore.updateLinkedCredential("lucos_test_client2", "staging", "lucos_test_server", "testing", "")
+	datastore.updateLinkedCredential("lucos_test_client3", "development", "lucos_test_server", "testing", "")
 	client1Creds, err := datastore.getAllCredentialsBySystemEnvironment("lucos_test_client1", "testing")
 	assertNoError(test, err)
 	client1Key := client1Creds["KEY_LUCOS_TEST_SERVER"]
@@ -92,11 +92,11 @@ func TestRotateLinkedCredentials(test *testing.T) {
 	defer os.Remove(datastorePath)
 	defer os.Remove(dataKeyPath)
 	datastore := initDatastore(datastorePath, dataKeyPath, MockLoganne{})
-	datastore.updateLinkedCredential("lucos_test_client", "testing", "lucos_test_server", "testing")
+	datastore.updateLinkedCredential("lucos_test_client", "testing", "lucos_test_server", "testing", "")
 	clientCreds, err := datastore.getAllCredentialsBySystemEnvironment("lucos_test_client", "testing")
 	assertNoError(test, err)
 	firstClientKey := clientCreds["KEY_LUCOS_TEST_SERVER"]
-	datastore.updateLinkedCredential("lucos_test_client", "testing", "lucos_test_server", "testing")
+	datastore.updateLinkedCredential("lucos_test_client", "testing", "lucos_test_server", "testing", "")
 	clientCreds, err = datastore.getAllCredentialsBySystemEnvironment("lucos_test_client", "testing")
 	assertNoError(test, err)
 	secondClientKey := clientCreds["KEY_LUCOS_TEST_SERVER"]
@@ -112,11 +112,11 @@ func TestUpdatingLinkToDifferentEnv(test *testing.T) {
 	defer os.Remove(datastorePath)
 	defer os.Remove(dataKeyPath)
 	datastore := initDatastore(datastorePath, dataKeyPath, MockLoganne{})
-	datastore.updateLinkedCredential("lucos_test_client", "testing", "lucos_test_server", "testing")
+	datastore.updateLinkedCredential("lucos_test_client", "testing", "lucos_test_server", "testing", "")
 	clientCreds, err := datastore.getAllCredentialsBySystemEnvironment("lucos_test_client", "testing")
 	assertNoError(test, err)
 	firstClientKey := clientCreds["KEY_LUCOS_TEST_SERVER"]
-	datastore.updateLinkedCredential("lucos_test_client", "testing", "lucos_test_server", "staging")
+	datastore.updateLinkedCredential("lucos_test_client", "testing", "lucos_test_server", "staging", "")
 	clientCreds, err = datastore.getAllCredentialsBySystemEnvironment("lucos_test_client", "testing")
 	assertNoError(test, err)
 	secondClientKey := clientCreds["KEY_LUCOS_TEST_SERVER"]
@@ -150,7 +150,7 @@ func TestUpdatingLinkedCredentialNotifiesLoganne(test *testing.T) {
 	defer os.Remove(datastorePath)
 	defer os.Remove(dataKeyPath)
 	datastore := initDatastore(datastorePath, dataKeyPath, MockLoganne{})
-	datastore.updateLinkedCredential("lucos_test_client", "testing", "lucos_test_server", "testing")
+	datastore.updateLinkedCredential("lucos_test_client", "testing", "lucos_test_server", "testing", "")
 	assertEqual(test, "Wrong number of calls to loganne", 2, loganneRequestCount)
 	assertEqual(test, "Wrong call type to loganne", "credentialUpdated", lastLoganneType)
 	assertEqual(test, "Wrong system sent to loganne", "lucos_test_server", lastLoganneSystem)
@@ -163,7 +163,7 @@ func TestDeletingLinkedCredential(test *testing.T) {
 	defer os.Remove(datastorePath)
 	defer os.Remove(dataKeyPath)
 	datastore := initDatastore(datastorePath, dataKeyPath, MockLoganne{})
-	datastore.updateLinkedCredential("lucos_test_client", "testing", "lucos_test_server", "testing")
+	datastore.updateLinkedCredential("lucos_test_client", "testing", "lucos_test_server", "testing", "")
 	// Verify the link exists before deletion
 	clientCreds, err := datastore.getAllCredentialsBySystemEnvironment("lucos_test_client", "testing")
 	assertNoError(test, err)
@@ -186,8 +186,8 @@ func TestDeletingLinkedCredentialIsTargettedCorrectly(test *testing.T) {
 	defer os.Remove(datastorePath)
 	defer os.Remove(dataKeyPath)
 	datastore := initDatastore(datastorePath, dataKeyPath, MockLoganne{})
-	datastore.updateLinkedCredential("lucos_test_client1", "testing", "lucos_test_server", "testing")
-	datastore.updateLinkedCredential("lucos_test_client2", "testing", "lucos_test_server", "testing")
+	datastore.updateLinkedCredential("lucos_test_client1", "testing", "lucos_test_server", "testing", "")
+	datastore.updateLinkedCredential("lucos_test_client2", "testing", "lucos_test_server", "testing", "")
 	// Delete only the first link
 	err := datastore.deleteLinkedCredential("lucos_test_client1", "testing", "lucos_test_server")
 	assertNoError(test, err)
@@ -212,7 +212,7 @@ func TestDeletingLinkedCredentialNotifiesLoganne(test *testing.T) {
 	defer os.Remove(datastorePath)
 	defer os.Remove(dataKeyPath)
 	datastore := initDatastore(datastorePath, dataKeyPath, MockLoganne{})
-	datastore.updateLinkedCredential("lucos_test_client", "testing", "lucos_test_server", "testing")
+	datastore.updateLinkedCredential("lucos_test_client", "testing", "lucos_test_server", "testing", "")
 	loganneRequestCount = 0 // Reset after setup
 	datastore.deleteLinkedCredential("lucos_test_client", "testing", "lucos_test_server")
 	assertEqual(test, "Wrong number of calls to loganne", 2, loganneRequestCount)
@@ -308,8 +308,8 @@ func TestListingSystemEnvironments(test *testing.T) {
 	datastore.updateCredential("lucos_test2", "testing", "SPECIAL_KEY", "lavender")
 	datastore.updateCredential("lucos_test", "staging", "SPECIAL_CODE", "hotpink")
 	datastore.updateCredential("lucos_mixed", "testing", "SPECIAL_CODE", "mint")
-	datastore.updateLinkedCredential("lucos_test_client1", "testing", "lucos_test_server1", "testing")
-	datastore.updateLinkedCredential("lucos_mixed", "testing", "lucos_test_server2", "testing")
+	datastore.updateLinkedCredential("lucos_test_client1", "testing", "lucos_test_server1", "testing", "")
+	datastore.updateLinkedCredential("lucos_mixed", "testing", "lucos_test_server2", "testing", "")
 
 	actual, err := datastore.getAllSystemEnvironments()
 	assertNoError(test, err)
@@ -324,4 +324,136 @@ func TestListingSystemEnvironments(test *testing.T) {
 	}
 
 	assertEqual(test, "Wrong list of system environments returned", expected, actual)
+}
+
+func TestLinkedCredentialWithScope(test *testing.T) {
+	datastorePath := "test_db.sqlite"
+	dataKeyPath := "test_data.key"
+	defer os.Remove(datastorePath)
+	defer os.Remove(dataKeyPath)
+	datastore := initDatastore(datastorePath, dataKeyPath, MockLoganne{})
+	datastore.updateLinkedCredential("lucos_test_client", "testing", "lucos_test_server", "testing", "photos:add")
+	clientCreds, err := datastore.getAllCredentialsBySystemEnvironment("lucos_test_client", "testing")
+	assertNoError(test, err)
+	clientKey := clientCreds["KEY_LUCOS_TEST_SERVER"]
+	assertNotEqual(test, "Client not given credential", "", clientKey)
+	serverCreds, err := datastore.getAllCredentialsBySystemEnvironment("lucos_test_server", "testing")
+	assertNoError(test, err)
+	expected := "lucos_test_client:testing=" + clientKey + "|photos:add"
+	assertEqual(test, "CLIENT_KEYS should include scope after pipe delimiter", expected, serverCreds["CLIENT_KEYS"])
+}
+
+func TestLinkedCredentialNoScopeHasNoPipeInClientKeys(test *testing.T) {
+	datastorePath := "test_db.sqlite"
+	dataKeyPath := "test_data.key"
+	defer os.Remove(datastorePath)
+	defer os.Remove(dataKeyPath)
+	datastore := initDatastore(datastorePath, dataKeyPath, MockLoganne{})
+	datastore.updateLinkedCredential("lucos_test_client", "testing", "lucos_test_server", "testing", "")
+	clientCreds, err := datastore.getAllCredentialsBySystemEnvironment("lucos_test_client", "testing")
+	assertNoError(test, err)
+	clientKey := clientCreds["KEY_LUCOS_TEST_SERVER"]
+	serverCreds, err := datastore.getAllCredentialsBySystemEnvironment("lucos_test_server", "testing")
+	assertNoError(test, err)
+	expected := "lucos_test_client:testing=" + clientKey
+	assertEqual(test, "CLIENT_KEYS without scope should not contain pipe", expected, serverCreds["CLIENT_KEYS"])
+}
+
+func TestMixedScopedAndUnscopedClientKeys(test *testing.T) {
+	datastorePath := "test_db.sqlite"
+	dataKeyPath := "test_data.key"
+	defer os.Remove(datastorePath)
+	defer os.Remove(dataKeyPath)
+	datastore := initDatastore(datastorePath, dataKeyPath, MockLoganne{})
+	datastore.updateLinkedCredential("lucos_test_client1", "testing", "lucos_test_server", "testing", "photos:add")
+	datastore.updateLinkedCredential("lucos_test_client2", "testing", "lucos_test_server", "testing", "")
+	client1Creds, err := datastore.getAllCredentialsBySystemEnvironment("lucos_test_client1", "testing")
+	assertNoError(test, err)
+	client1Key := client1Creds["KEY_LUCOS_TEST_SERVER"]
+	client2Creds, err := datastore.getAllCredentialsBySystemEnvironment("lucos_test_client2", "testing")
+	assertNoError(test, err)
+	client2Key := client2Creds["KEY_LUCOS_TEST_SERVER"]
+	serverCreds, err := datastore.getAllCredentialsBySystemEnvironment("lucos_test_server", "testing")
+	assertNoError(test, err)
+	expected := "lucos_test_client1:testing=" + client1Key + "|photos:add;lucos_test_client2:testing=" + client2Key
+	assertEqual(test, "Mixed scoped and unscoped CLIENT_KEYS", expected, serverCreds["CLIENT_KEYS"])
+}
+
+func TestScopeUpdateNotifiesLoganne(test *testing.T) {
+	loganneRequestCount = 0
+	datastorePath := "test_db.sqlite"
+	dataKeyPath := "test_data.key"
+	defer os.Remove(datastorePath)
+	defer os.Remove(dataKeyPath)
+	datastore := initDatastore(datastorePath, dataKeyPath, MockLoganne{})
+	datastore.updateLinkedCredential("lucos_test_client", "testing", "lucos_test_server", "testing", "photos:add")
+	// updateLinkedCredential fires 2 events: client KEY (with scope) and server CLIENT_KEYS
+	assertEqual(test, "Wrong number of calls to loganne", 2, loganneRequestCount)
+	// Scope is a per-client permission — it belongs on the client credential event (KEY_xxx).
+	// postCredentialUpdated (server event) does not touch lastLoganneScope, so this reflects the client event.
+	assertEqual(test, "Scope should be included in client credential loganne event", "photos:add", lastLoganneScope)
+}
+
+func TestNoScopeLogannEventWithoutScope(test *testing.T) {
+	loganneRequestCount = 0
+	datastorePath := "test_db.sqlite"
+	dataKeyPath := "test_data.key"
+	defer os.Remove(datastorePath)
+	defer os.Remove(dataKeyPath)
+	datastore := initDatastore(datastorePath, dataKeyPath, MockLoganne{})
+	datastore.updateLinkedCredential("lucos_test_client", "testing", "lucos_test_server", "testing", "")
+	// 2 events: client KEY (no scope) + server CLIENT_KEYS
+	assertEqual(test, "Wrong number of calls to loganne without scope", 2, loganneRequestCount)
+	assertEqual(test, "Scope should be empty when not set", "", lastLoganneScope)
+}
+
+func TestScopeRemovalAuditedInLoganne(test *testing.T) {
+	loganneRequestCount = 0
+	datastorePath := "test_db.sqlite"
+	dataKeyPath := "test_data.key"
+	defer os.Remove(datastorePath)
+	defer os.Remove(dataKeyPath)
+	datastore := initDatastore(datastorePath, dataKeyPath, MockLoganne{})
+	datastore.updateLinkedCredential("lucos_test_client", "testing", "lucos_test_server", "testing", "photos:add")
+	loganneRequestCount = 0 // Reset after initial setup
+	// Clearing scope fires 2 events; client KEY event carries empty scope, auditing the removal
+	datastore.updateLinkedCredential("lucos_test_client", "testing", "lucos_test_server", "testing", "")
+	assertEqual(test, "Clearing scope should fire 2 Loganne events", 2, loganneRequestCount)
+	assertEqual(test, "Client credential event should fire on scope removal", "credentialUpdated", lastLoganneType)
+	assertEqual(test, "Scope should be empty on client event after removal", "", lastLoganneScope)
+}
+
+func TestScopeRemovalClearsClientKeys(test *testing.T) {
+	datastorePath := "test_db.sqlite"
+	dataKeyPath := "test_data.key"
+	defer os.Remove(datastorePath)
+	defer os.Remove(dataKeyPath)
+	datastore := initDatastore(datastorePath, dataKeyPath, MockLoganne{})
+	datastore.updateLinkedCredential("lucos_test_client", "testing", "lucos_test_server", "testing", "photos:add")
+	datastore.updateLinkedCredential("lucos_test_client", "testing", "lucos_test_server", "testing", "")
+	clientCreds, err := datastore.getAllCredentialsBySystemEnvironment("lucos_test_client", "testing")
+	assertNoError(test, err)
+	clientKey := clientCreds["KEY_LUCOS_TEST_SERVER"]
+	serverCreds, err := datastore.getAllCredentialsBySystemEnvironment("lucos_test_server", "testing")
+	assertNoError(test, err)
+	expected := "lucos_test_client:testing=" + clientKey
+	assertEqual(test, "CLIENT_KEYS should not include pipe after scope removed", expected, serverCreds["CLIENT_KEYS"])
+}
+
+func TestScopeAllowlistValidation(test *testing.T) {
+	datastorePath := "test_db.sqlite"
+	dataKeyPath := "test_data.key"
+	defer os.Remove(datastorePath)
+	defer os.Remove(dataKeyPath)
+	datastore := initDatastore(datastorePath, dataKeyPath, MockLoganne{})
+	// Valid scopes — alphanumeric, colons and commas permitted
+	assertEqual(test, "photos:add should be valid", nil, datastore.updateLinkedCredential("lucos_test_client", "testing", "lucos_test_server", "testing", "photos:add"))
+	assertEqual(test, "photos:add,photos:read should be valid", nil, datastore.updateLinkedCredential("lucos_test_client", "testing", "lucos_test_server", "testing", "photos:add,photos:read"))
+	assertEqual(test, "metadata:write should be valid", nil, datastore.updateLinkedCredential("lucos_test_client", "testing", "lucos_test_server", "testing", "metadata:write"))
+	// Invalid scopes — characters outside the allowlist are rejected
+	assertNotEqual(test, "Scope with | should be rejected", nil, datastore.updateLinkedCredential("lucos_test_client", "testing", "lucos_test_server", "testing", "photos|read"))
+	assertNotEqual(test, "Scope with ; should be rejected", nil, datastore.updateLinkedCredential("lucos_test_client", "testing", "lucos_test_server", "testing", "photos;add"))
+	assertNotEqual(test, "Scope with = should be rejected", nil, datastore.updateLinkedCredential("lucos_test_client", "testing", "lucos_test_server", "testing", "photos=add"))
+	assertNotEqual(test, "Scope with space should be rejected", nil, datastore.updateLinkedCredential("lucos_test_client", "testing", "lucos_test_server", "testing", "photos add"))
+	assertNotEqual(test, "Scope with newline should be rejected", nil, datastore.updateLinkedCredential("lucos_test_client", "testing", "lucos_test_server", "testing", "photos\nadd"))
 }

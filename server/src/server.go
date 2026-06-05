@@ -211,15 +211,28 @@ func handleSshConnection(connection net.Conn, config *ssh.ServerConfig, datastor
 								exitStatus.code = StatusBadSyntax
 								channel.Write([]byte("Syntax Error: Unexpected number of slashes\n"))
 							} else {
-								if allowedEnvironment != "" && (clientParts[1] != allowedEnvironment || serverParts[1] != allowedEnvironment) {
+								// Parse optional scope from serverenvironment: "production|photos:add" → env="production", scope="photos:add"
+								serverEnvAndScope := strings.SplitN(serverParts[1], "|", 2)
+								serverEnvironment := serverEnvAndScope[0]
+								scope := ""
+								if len(serverEnvAndScope) == 2 {
+									scope = serverEnvAndScope[1]
+								}
+								if allowedEnvironment != "" && (clientParts[1] != allowedEnvironment || serverEnvironment != allowedEnvironment) {
 									exitStatus.code = StatusValidationError
 									channel.Write([]byte("Access to environments outside of `"+allowedEnvironment+"` is not permitted for this key\n"))
 								} else {
 								slog.Debug("Accepting exec linked credential request", "client", clientParts, "server", serverParts)
-								err := datastore.updateLinkedCredential(clientParts[0], clientParts[1], serverParts[0], serverParts[1])
+								err := datastore.updateLinkedCredential(clientParts[0], clientParts[1], serverParts[0], serverEnvironment, scope)
 								if err != nil {
-									exitStatus.code = StatusInternalError
-									slog.Warn("Failed to update linked credential", slog.Any("error", err))
+									if (errors.As(err, &validationError)) {
+										exitStatus.code = StatusValidationError
+										slog.Warn("Validation error updating linked credential", slog.Any("error", err))
+										channel.Write([]byte(err.Error()+"\n"))
+									} else {
+										exitStatus.code = StatusInternalError
+										slog.Error("Failed to update linked credential", slog.Any("error", err))
+									}
 								}
 								}
 							}
