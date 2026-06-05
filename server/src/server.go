@@ -227,10 +227,11 @@ func handleSshConnection(connection net.Conn, config *ssh.ServerConfig, datastor
 								if err != nil {
 									if (errors.As(err, &validationError)) {
 										exitStatus.code = StatusValidationError
+										slog.Warn("Validation error updating linked credential", slog.Any("error", err))
 										channel.Write([]byte(err.Error()+"\n"))
 									} else {
 										exitStatus.code = StatusInternalError
-										slog.Warn("Failed to update linked credential", slog.Any("error", err))
+										slog.Error("Failed to update linked credential", slog.Any("error", err))
 									}
 								}
 								}

@@ -387,11 +387,10 @@ func TestScopeUpdateNotifiesLoganne(test *testing.T) {
 	defer os.Remove(dataKeyPath)
 	datastore := initDatastore(datastorePath, dataKeyPath, MockLoganne{})
 	datastore.updateLinkedCredential("lucos_test_client", "testing", "lucos_test_server", "testing", "photos:add")
-	// updateLinkedCredential with scope should fire 3 events: client KEY, server CLIENT_KEYS, scope event
-	assertEqual(test, "Wrong number of calls to loganne", 3, loganneRequestCount)
-	assertEqual(test, "Last loganne event type should be scope update", "credentialScopeUpdated", lastLoganneType)
-	assertEqual(test, "Wrong server system in scope loganne event", "lucos_test_server", lastLoganneSystem)
-	assertEqual(test, "Wrong server environment in scope loganne event", "testing", lastLoganneEnvironment)
+	// updateLinkedCredential fires 2 events: client KEY and server CLIENT_KEYS (which includes scope)
+	assertEqual(test, "Wrong number of calls to loganne", 2, loganneRequestCount)
+	assertEqual(test, "Client_KEYS event type", "credentialUpdated", lastLoganneType)
+	assertEqual(test, "Scope should be included in CLIENT_KEYS loganne event", "photos:add", lastLoganneScope)
 }
 
 func TestNoScopeLogannEventWithoutScope(test *testing.T) {
@@ -402,11 +401,12 @@ func TestNoScopeLogannEventWithoutScope(test *testing.T) {
 	defer os.Remove(dataKeyPath)
 	datastore := initDatastore(datastorePath, dataKeyPath, MockLoganne{})
 	datastore.updateLinkedCredential("lucos_test_client", "testing", "lucos_test_server", "testing", "")
-	// Without scope, only 2 events should fire (client KEY + server CLIENT_KEYS)
+	// 2 events: client KEY + server CLIENT_KEYS (scope empty)
 	assertEqual(test, "Wrong number of calls to loganne without scope", 2, loganneRequestCount)
+	assertEqual(test, "Scope should be empty when not set", "", lastLoganneScope)
 }
 
-func TestScopeRemovalNotifiesLoganne(test *testing.T) {
+func TestScopeRemovalAuditedInLoganne(test *testing.T) {
 	loganneRequestCount = 0
 	datastorePath := "test_db.sqlite"
 	dataKeyPath := "test_data.key"
@@ -415,10 +415,12 @@ func TestScopeRemovalNotifiesLoganne(test *testing.T) {
 	datastore := initDatastore(datastorePath, dataKeyPath, MockLoganne{})
 	datastore.updateLinkedCredential("lucos_test_client", "testing", "lucos_test_server", "testing", "photos:add")
 	loganneRequestCount = 0 // Reset after initial setup
-	// Clearing scope should still fire 3 events: client KEY, server CLIENT_KEYS, scope removal event
+	// Clearing scope fires 2 events (client KEY + server CLIENT_KEYS with empty scope),
+	// capturing the state change in the audit trail
 	datastore.updateLinkedCredential("lucos_test_client", "testing", "lucos_test_server", "testing", "")
-	assertEqual(test, "Clearing scope should fire 3 Loganne events", 3, loganneRequestCount)
-	assertEqual(test, "Last loganne event type should be scope update on removal", "credentialScopeUpdated", lastLoganneType)
+	assertEqual(test, "Clearing scope should fire 2 Loganne events", 2, loganneRequestCount)
+	assertEqual(test, "CLIENT_KEYS event should fire on scope removal", "credentialUpdated", lastLoganneType)
+	assertEqual(test, "Scope should be empty after removal", "", lastLoganneScope)
 }
 
 func TestScopeRemovalClearsClientKeys(test *testing.T) {
@@ -438,20 +440,20 @@ func TestScopeRemovalClearsClientKeys(test *testing.T) {
 	assertEqual(test, "CLIENT_KEYS should not include pipe after scope removed", expected, serverCreds["CLIENT_KEYS"])
 }
 
-func TestRejectScopeWithReservedCharacters(test *testing.T) {
+func TestScopeAllowlistValidation(test *testing.T) {
 	datastorePath := "test_db.sqlite"
 	dataKeyPath := "test_data.key"
 	defer os.Remove(datastorePath)
 	defer os.Remove(dataKeyPath)
 	datastore := initDatastore(datastorePath, dataKeyPath, MockLoganne{})
-	// Characters that would break CLIENT_KEYS parsing must be rejected
-	err := datastore.updateLinkedCredential("lucos_test_client", "testing", "lucos_test_server", "testing", "photos:add|read")
-	assertNotEqual(test, "Scope with | should be rejected", nil, err)
-	err = datastore.updateLinkedCredential("lucos_test_client", "testing", "lucos_test_server", "testing", "photos;add")
-	assertNotEqual(test, "Scope with ; should be rejected", nil, err)
-	err = datastore.updateLinkedCredential("lucos_test_client", "testing", "lucos_test_server", "testing", "photos=add")
-	assertNotEqual(test, "Scope with = should be rejected", nil, err)
-	// Colons are permitted: the agreed naming convention is {resource}:{action} (e.g. photos:add)
-	err = datastore.updateLinkedCredential("lucos_test_client", "testing", "lucos_test_server", "testing", "photos:add")
-	assertEqual(test, "Scope with : should be permitted (resource:action convention)", nil, err)
+	// Valid scopes — alphanumeric, colons and commas permitted
+	assertEqual(test, "photos:add should be valid", nil, datastore.updateLinkedCredential("lucos_test_client", "testing", "lucos_test_server", "testing", "photos:add"))
+	assertEqual(test, "photos:add,photos:read should be valid", nil, datastore.updateLinkedCredential("lucos_test_client", "testing", "lucos_test_server", "testing", "photos:add,photos:read"))
+	assertEqual(test, "metadata:write should be valid", nil, datastore.updateLinkedCredential("lucos_test_client", "testing", "lucos_test_server", "testing", "metadata:write"))
+	// Invalid scopes — characters outside the allowlist are rejected
+	assertNotEqual(test, "Scope with | should be rejected", nil, datastore.updateLinkedCredential("lucos_test_client", "testing", "lucos_test_server", "testing", "photos|read"))
+	assertNotEqual(test, "Scope with ; should be rejected", nil, datastore.updateLinkedCredential("lucos_test_client", "testing", "lucos_test_server", "testing", "photos;add"))
+	assertNotEqual(test, "Scope with = should be rejected", nil, datastore.updateLinkedCredential("lucos_test_client", "testing", "lucos_test_server", "testing", "photos=add"))
+	assertNotEqual(test, "Scope with space should be rejected", nil, datastore.updateLinkedCredential("lucos_test_client", "testing", "lucos_test_server", "testing", "photos add"))
+	assertNotEqual(test, "Scope with newline should be rejected", nil, datastore.updateLinkedCredential("lucos_test_client", "testing", "lucos_test_server", "testing", "photos\nadd"))
 }

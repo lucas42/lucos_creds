@@ -26,6 +26,7 @@ var lastLoganneCredential NormalisedCredential
 var lastLoganneSystem string
 var lastLoganneEnvironment string
 var lastLoganneKey string
+var lastLoganneScope string
 var loganneRequestCount int
 
 type MockLoganne struct {}
@@ -44,11 +45,12 @@ func (mock MockLoganne) postCredentialDeleted(system string, environment string,
 	lastLoganneKey = key
 	loganneRequestCount++
 }
-func (mock MockLoganne) postScopeUpdated(clientSystem string, clientEnvironment string, serverSystem string, serverEnvironment string) {
-	lastLoganneType = "credentialScopeUpdated"
+func (mock MockLoganne) postLinkedCredentialUpdated(serverSystem string, serverEnvironment string, clientSystem string, clientEnvironment string, scope string) {
+	lastLoganneType = "credentialUpdated"
 	lastLoganneSystem = serverSystem
 	lastLoganneEnvironment = serverEnvironment
 	lastLoganneKey = "CLIENT_KEYS"
+	lastLoganneScope = scope
 	loganneRequestCount++
 }
 

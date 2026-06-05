@@ -400,8 +400,8 @@ func TestCreateLinkedCredentialWithScopeOverSSH(test *testing.T) {
 func TestCreateLinkedCredentialWithInvalidScopeOverSSH(test *testing.T) {
 	defer startTestServer(test)()
 
-	// Scope containing | would corrupt CLIENT_KEYS parsing — must be rejected
-	assertSshCommandReturnsError(test, "lucos_test_client/production => lucos_test_server/production|photos:add|read", StatusValidationError, "Validation Error: scope must not contain reserved characters: | ; =\n")
+	// Scope containing | (after the initial | env/scope delimiter) is not in the allowlist — must be rejected
+	assertSshCommandReturnsError(test, "lucos_test_client/production => lucos_test_server/production|photos:add|read", StatusValidationError, "Validation Error: scope contains invalid character '|': only alphanumeric characters, colons and commas are permitted\n")
 }
 
 func TestDeleteCredentialOverSSH(test *testing.T) {
