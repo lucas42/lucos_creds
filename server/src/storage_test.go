@@ -387,10 +387,11 @@ func TestScopeUpdateNotifiesLoganne(test *testing.T) {
 	defer os.Remove(dataKeyPath)
 	datastore := initDatastore(datastorePath, dataKeyPath, MockLoganne{})
 	datastore.updateLinkedCredential("lucos_test_client", "testing", "lucos_test_server", "testing", "photos:add")
-	// updateLinkedCredential fires 2 events: client KEY and server CLIENT_KEYS (which includes scope)
+	// updateLinkedCredential fires 2 events: client KEY (with scope) and server CLIENT_KEYS
 	assertEqual(test, "Wrong number of calls to loganne", 2, loganneRequestCount)
-	assertEqual(test, "Client_KEYS event type", "credentialUpdated", lastLoganneType)
-	assertEqual(test, "Scope should be included in CLIENT_KEYS loganne event", "photos:add", lastLoganneScope)
+	// Scope is a per-client permission — it belongs on the client credential event (KEY_xxx).
+	// postCredentialUpdated (server event) does not touch lastLoganneScope, so this reflects the client event.
+	assertEqual(test, "Scope should be included in client credential loganne event", "photos:add", lastLoganneScope)
 }
 
 func TestNoScopeLogannEventWithoutScope(test *testing.T) {
@@ -401,7 +402,7 @@ func TestNoScopeLogannEventWithoutScope(test *testing.T) {
 	defer os.Remove(dataKeyPath)
 	datastore := initDatastore(datastorePath, dataKeyPath, MockLoganne{})
 	datastore.updateLinkedCredential("lucos_test_client", "testing", "lucos_test_server", "testing", "")
-	// 2 events: client KEY + server CLIENT_KEYS (scope empty)
+	// 2 events: client KEY (no scope) + server CLIENT_KEYS
 	assertEqual(test, "Wrong number of calls to loganne without scope", 2, loganneRequestCount)
 	assertEqual(test, "Scope should be empty when not set", "", lastLoganneScope)
 }
@@ -415,12 +416,11 @@ func TestScopeRemovalAuditedInLoganne(test *testing.T) {
 	datastore := initDatastore(datastorePath, dataKeyPath, MockLoganne{})
 	datastore.updateLinkedCredential("lucos_test_client", "testing", "lucos_test_server", "testing", "photos:add")
 	loganneRequestCount = 0 // Reset after initial setup
-	// Clearing scope fires 2 events (client KEY + server CLIENT_KEYS with empty scope),
-	// capturing the state change in the audit trail
+	// Clearing scope fires 2 events; client KEY event carries empty scope, auditing the removal
 	datastore.updateLinkedCredential("lucos_test_client", "testing", "lucos_test_server", "testing", "")
 	assertEqual(test, "Clearing scope should fire 2 Loganne events", 2, loganneRequestCount)
-	assertEqual(test, "CLIENT_KEYS event should fire on scope removal", "credentialUpdated", lastLoganneType)
-	assertEqual(test, "Scope should be empty after removal", "", lastLoganneScope)
+	assertEqual(test, "Client credential event should fire on scope removal", "credentialUpdated", lastLoganneType)
+	assertEqual(test, "Scope should be empty on client event after removal", "", lastLoganneScope)
 }
 
 func TestScopeRemovalClearsClientKeys(test *testing.T) {

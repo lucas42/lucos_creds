@@ -17,7 +17,7 @@ var loganneHTTPClient = &http.Client{Timeout: 5 * time.Second}
 type LoganneInterface interface {
 	postCredentialUpdated(string, string, string)
 	postCredentialDeleted(string, string, string)
-	postLinkedCredentialUpdated(serverSystem, serverEnv, clientSystem, clientEnv, scope string)
+	postLinkedCredentialUpdated(system, environment, key, scope string)
 }
 
 type Loganne struct {
@@ -79,16 +79,18 @@ func (loganne Loganne) postCredentialDeleted(system string, environment string, 
 	loganne.post("credentialDeleted", loganneMessage, credential, "")
 }
 
-func (loganne Loganne) postLinkedCredentialUpdated(serverSystem string, serverEnvironment string, clientSystem string, clientEnvironment string, scope string) {
-	credential := NormalisedCredential{ System: serverSystem, Environment: serverEnvironment, Key: "CLIENT_KEYS", Scope: scope }
+// postLinkedCredentialUpdated is used for the client-side credential event when a linked credential is
+// created or updated. Scope is a per-client permission, so it belongs on the client credential event.
+func (loganne Loganne) postLinkedCredentialUpdated(system string, environment string, key string, scope string) {
+	credential := NormalisedCredential{ System: system, Environment: environment, Key: key, Scope: scope }
 	scopePart := ""
 	if scope != "" {
 		scopePart = fmt.Sprintf(" with scope %q", scope)
 	}
-	loganneMessage := fmt.Sprintf("Credential CLIENT_KEYS updated in %s (%s): %s:%s%s", serverSystem, serverEnvironment, clientSystem, clientEnvironment, scopePart)
+	loganneMessage := fmt.Sprintf("Credential %s updated in %s (%s)%s", key, system, environment, scopePart)
 	credurl := ""
 	if loganne.ui_domain != "" {
-		credurl = loganne.ui_domain+"/system/"+url.QueryEscape(serverSystem)+"/"+url.QueryEscape(serverEnvironment)+"/CLIENT_KEYS"
+		credurl = loganne.ui_domain+"/system/"+url.QueryEscape(system)+"/"+url.QueryEscape(environment)+"/"+url.QueryEscape(key)
 	}
 	loganne.post("credentialUpdated", loganneMessage, credential, credurl)
 }

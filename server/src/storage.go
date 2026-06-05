@@ -369,8 +369,9 @@ func (datastore Datastore) updateLinkedCredential(client_system string, client_e
 		return
 	}
 	slog.Info("Updated Linked Credential", "credential", credential)
-	datastore.loganne.postCredentialUpdated(credential.ClientSystem, credential.ClientEnvironment, strings.ToUpper("KEY_"+credential.ServerSystem))
-	datastore.loganne.postLinkedCredentialUpdated(credential.ServerSystem, credential.ServerEnvironment, credential.ClientSystem, credential.ClientEnvironment, scope)
+	// Scope is a per-client permission: surface it on the client credential event, not the server one
+	datastore.loganne.postLinkedCredentialUpdated(credential.ClientSystem, credential.ClientEnvironment, strings.ToUpper("KEY_"+credential.ServerSystem), scope)
+	datastore.loganne.postCredentialUpdated(credential.ServerSystem, credential.ServerEnvironment, strings.ToUpper("CLIENT_KEYS"))
 	return
 }
 

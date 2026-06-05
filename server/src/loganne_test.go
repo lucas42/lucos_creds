@@ -45,11 +45,11 @@ func (mock MockLoganne) postCredentialDeleted(system string, environment string,
 	lastLoganneKey = key
 	loganneRequestCount++
 }
-func (mock MockLoganne) postLinkedCredentialUpdated(serverSystem string, serverEnvironment string, clientSystem string, clientEnvironment string, scope string) {
+func (mock MockLoganne) postLinkedCredentialUpdated(system string, environment string, key string, scope string) {
 	lastLoganneType = "credentialUpdated"
-	lastLoganneSystem = serverSystem
-	lastLoganneEnvironment = serverEnvironment
-	lastLoganneKey = "CLIENT_KEYS"
+	lastLoganneSystem = system
+	lastLoganneEnvironment = environment
+	lastLoganneKey = key
 	lastLoganneScope = scope
 	loganneRequestCount++
 }
