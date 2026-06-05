@@ -248,6 +248,7 @@ func (datastore Datastore) getClientCredentialsBySystemEnvironment(system string
 			Environment: clientCredential.ClientEnvironment,
 			Key: key,
 			Value: clientCredential.PlainValue,
+			Scope: clientCredential.Scope.String, // empty string when NULL, omitted from JSON via omitempty
 		})
 	}
 	return

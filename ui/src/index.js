@@ -208,6 +208,18 @@ app.get('/update-linked-credential', catchErrors(async (req, res) => {
 	if (!(clientenvironment in environments)) clientenvironment = null;
 	if (!(serversystem in systems)) serversystem = null;
 	if (!(serverenvironment in environments)) serverenvironment = null;
+	// If editing an existing credential (all four fields known) and scope was not passed in the
+	// query string, fetch the current scope from the server so the form pre-populates it.
+	// This prevents scope being silently wiped when refreshing (rotating) a credential key.
+	if (clientsystem && clientenvironment && serversystem && serverenvironment && scope === undefined) {
+		try {
+			const keyName = `KEY_${serversystem.toUpperCase()}`;
+			const existingCredential = await getCredential(clientsystem, clientenvironment, keyName);
+			scope = existingCredential.scope || '';
+		} catch (e) {
+			scope = ''; // No existing credential yet — new link, start with empty scope
+		}
+	}
 	scope = scope || '';
 	const availableSystems = Object.keys(systems);
 	availableSystems.sort();

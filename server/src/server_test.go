@@ -397,6 +397,32 @@ func TestCreateLinkedCredentialWithScopeOverSSH(test *testing.T) {
 	assertScpCommandReturnsContent(test, "lucos_test_server/production/.env", "CLIENT_KEYS=\"lucos_test_client:production="+sharedCredential+"|photos:add\"\nENVIRONMENT=\"production\"\nSYSTEM=\"lucos_test_server\"\n")
 }
 
+func TestLsShowsScopeOnClientCredential(test *testing.T) {
+	defer startTestServer(test)()
+
+	assertSshCommandReturnsOutput(test, "lucos_test_client/production => lucos_test_server/production|photos:add", "")
+
+	// The scope should appear in the ls output for the client credential so the UI can read it back
+	output := ""
+	cmd := exec.Command(
+		"/usr/bin/ssh",
+		"-o BatchMode=yes",
+		"-o StrictHostKeyChecking=no",
+		"-o UserKnownHostsFile=/dev/null",
+		"-o LogLevel ERROR",
+		"-i"+TEST_CLIENTKEYPATH,
+		"-p "+TEST_PORT,
+		TEST_USER+"@localhost",
+		"ls lucos_test_client/production/KEY_LUCOS_TEST_SERVER",
+	)
+	stdout, err := cmd.Output()
+	assertNoError(test, err)
+	output = string(stdout)
+	if !strings.Contains(output, `"scope":"photos:add"`) {
+		test.Errorf("Expected ls output to contain scope, got: %s", output)
+	}
+}
+
 func TestCreateLinkedCredentialWithInvalidScopeOverSSH(test *testing.T) {
 	defer startTestServer(test)()
 
