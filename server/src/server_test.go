@@ -402,7 +402,7 @@ func TestLsShowsScopeOnClientCredential(test *testing.T) {
 
 	assertSshCommandReturnsOutput(test, "lucos_test_client/production => lucos_test_server/production|photos:add", "")
 
-	// The scope should appear in the ls output for the client credential so the UI can read it back
+	// The scope and server_environment should appear in the ls output for the client credential so the UI can read them back
 	output := ""
 	cmd := exec.Command(
 		"/usr/bin/ssh",
@@ -420,6 +420,9 @@ func TestLsShowsScopeOnClientCredential(test *testing.T) {
 	output = string(stdout)
 	if !strings.Contains(output, `"scope":"photos:add"`) {
 		test.Errorf("Expected ls output to contain scope, got: %s", output)
+	}
+	if !strings.Contains(output, `"server_environment":"production"`) {
+		test.Errorf("Expected ls output to contain server_environment, got: %s", output)
 	}
 }
 

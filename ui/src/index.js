@@ -208,17 +208,14 @@ app.get('/update-linked-credential', catchErrors(async (req, res) => {
 	if (!(clientenvironment in environments)) clientenvironment = null;
 	if (!(serversystem in systems)) serversystem = null;
 	if (!(serverenvironment in environments)) serverenvironment = null;
-	// If editing an existing credential (all four fields known) and scope was not passed in the
-	// query string, fetch the current scope from the server so the form pre-populates it.
-	// This prevents scope being silently wiped when refreshing (rotating) a credential key.
-	if (clientsystem && clientenvironment && serversystem && serverenvironment && scope === undefined) {
-		try {
-			const keyName = `KEY_${serversystem.toUpperCase()}`;
-			const existingCredential = await getCredential(clientsystem, clientenvironment, keyName);
-			scope = existingCredential.scope || '';
-		} catch (e) {
-			scope = ''; // No existing credential yet — new link, start with empty scope
-		}
+	// If editing an existing credential (client+server system known) and scope or serverenvironment
+	// were not passed in the query string, fetch from the DB so the form pre-populates them.
+	// Covers the Refresh Credential button on the client system page, which doesn't know serverenvironment.
+	if (clientsystem && clientenvironment && serversystem && (scope === undefined || !serverenvironment)) {
+		const keyName = `KEY_${serversystem.toUpperCase()}`;
+		const existingCredential = await getCredential(clientsystem, clientenvironment, keyName);
+		if (scope === undefined) scope = existingCredential.scope || '';
+		if (!serverenvironment) serverenvironment = existingCredential.server_environment;
 	}
 	scope = scope || '';
 	const availableSystems = Object.keys(systems);
@@ -245,7 +242,18 @@ app.post('/update-linked-credential', catchErrors(async (req, res) => {
 		return;
 	}
 	const serverEnvWithScope = scope ? `${serverenvironment}|${scope}` : serverenvironment;
-	await sshExec(`${clientsystem}/${clientenvironment} => ${serversystem}/${serverEnvWithScope}`);
+	try {
+		await sshExec(`${clientsystem}/${clientenvironment} => ${serversystem}/${serverEnvWithScope}`);
+	} catch (error) {
+		if (error.code == 4) {
+			const params = new URLSearchParams(req.body);
+			params.append('error', error.stdout.trim());
+			res.redirect(303, '/update-linked-credential?'+params.toString());
+			return;
+		} else {
+			throw error;
+		}
+	}
 	res.redirect(303, `/system/${serversystem}/${serverenvironment}/CLIENT_KEYS`);
 }));
 

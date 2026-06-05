@@ -90,12 +90,13 @@ func (store Datastore) ColumnExists(tablename string, columnname string) bool {
  * But they not how they're stored in the database
  */
 type NormalisedCredential struct {
-	System      string `json:"system"`
-	Environment string `json:"environment"`
-	Key         string `json:"key"`
-	Type        string `json:"type,omitempty"`
-	Value       string `json:"value,omitempty"`
-	Scope       string `json:"scope,omitempty"`
+	System            string `json:"system"`
+	Environment       string `json:"environment"`
+	Key               string `json:"key"`
+	Type              string `json:"type,omitempty"`
+	Value             string `json:"value,omitempty"`
+	Scope             string `json:"scope,omitempty"`
+	ServerEnvironment string `json:"server_environment,omitempty"`
 }
 
 /**
@@ -249,6 +250,7 @@ func (datastore Datastore) getClientCredentialsBySystemEnvironment(system string
 			Key: key,
 			Value: clientCredential.PlainValue,
 			Scope: clientCredential.Scope.String, // empty string when NULL, omitted from JSON via omitempty
+			ServerEnvironment: clientCredential.ServerEnvironment,
 		})
 	}
 	return

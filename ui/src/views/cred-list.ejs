@@ -42,7 +42,6 @@
 							<input type="hidden" name="clientsystem" value="<%= system %>" />
 							<input type="hidden" name="clientenvironment" value="<%= environment %>" />
 							<input type="hidden" name="serversystem" value="<%= key.replace("KEY_", "").toLowerCase() %>" />
-							<!-- TODO: figure out the current serverenviornment -->
 							<input type="submit" title="Refresh Credential" value="♺" class="inline-button refresh-button" />
 						</form>
 						<form action="/delete-linked-credential" method="get" class="inline-form">
