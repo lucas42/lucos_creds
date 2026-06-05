@@ -229,7 +229,7 @@ app.get('/update-linked-credential', catchErrors(async (req, res) => {
 		clientenvironment,
 		serversystem,
 		serverenvironment,
-		scope,
+		credentialScope: scope,
 		error,
 	});
 }));
