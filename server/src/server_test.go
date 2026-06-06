@@ -95,6 +95,39 @@ func assertCommandOutput(test *testing.T, cmd *exec.Cmd, expected_exitcode int, 
 	assertEqual(test, "Unexpected stdout from command", expected_stdout, string(stdout_output))
 	assertEqual(test, "Unexpected stderr from command", expected_stderr, string(stderr_output))
 }
+// assertScpDenied runs an scp read that should be rejected and verifies:
+//  (1) the command exits non-zero (access was denied), and
+//  (2) no credential content was written to the destination.
+//
+// It deliberately does NOT assert the exact exit code or stderr message because
+// scp reports connection-close errors differently across OpenSSH versions and under
+// CI load (e.g. exit 255 + "Connection closed" vs exit 1 + "lost connection").
+func assertScpDenied(test *testing.T, path string) {
+	test.Helper()
+	destFile := "denied_scp_test.env"
+	defer os.Remove(destFile)
+	cmd := exec.Command(
+		"/usr/bin/scp",
+		"-s", // Needed for OpenSSH 8.9 which doesn't default to SFTP (can remove for OpenSSH9.0 and above)
+		"-o BatchMode=yes",
+		"-o StrictHostKeyChecking=no",
+		"-o UserKnownHostsFile=/dev/null",
+		"-o LogLevel ERROR",
+		"-i"+TEST_CLIENTKEYPATH,
+		"-P "+TEST_PORT,
+		TEST_USER+"@localhost:"+path,
+		destFile,
+	)
+	if err := cmd.Run(); err == nil {
+		test.Errorf("scp read of %q should have failed (access denied) but exited 0", path)
+	}
+	if _, statErr := os.Stat(destFile); statErr == nil {
+		contents, _ := os.ReadFile(destFile)
+		if len(contents) > 0 {
+			test.Errorf("credential content leaked from %q: destination file has %d bytes", path, len(contents))
+		}
+	}
+}
 func assertScpCommandReturnsContent(test *testing.T, path string, expected_content string) {
 	testFileName := "test.env"
 	cmd := exec.Command(
@@ -223,19 +256,7 @@ func TestWriteReadEnvFile(test *testing.T) {
 // Requests a file which isn't available on the server
 func TestReadMissingFile(test *testing.T) {
 	defer startTestServer(test)()
-	cmd := exec.Command(
-		"/usr/bin/scp",
-		"-s", // Needed for OpenSSH 8.9 which doesn't default to SFTP (can remove for OpenSSH9.0 and above)
-		"-o BatchMode=yes",
-		"-o StrictHostKeyChecking=no",
-		"-o UserKnownHostsFile=/dev/null",
-		"-o LogLevel ERROR",
-		"-i"+TEST_CLIENTKEYPATH,
-		"-P "+TEST_PORT,
-		TEST_USER+"@localhost:unknown_file.txt",
-		"/dev/null", // would prefer to send straight to /dev/stdout, then read cmd.Output(), but that causes weird errors on my laptop
-	);
-	assertCommandOutput(test, cmd, 255, "", "/usr/bin/scp: Connection closed\r\n")
+	assertScpDenied(test, "unknown_file.txt")
 }
 // Tries to log in as a user who isn't on the authorised list
 func TestInvalidUser(test *testing.T) {
@@ -534,19 +555,7 @@ func TestEnvironmentRestrictedAccess(test *testing.T) {
 	assertSshCommandReturnsError(test, "ls lucos_test/production/DEVKEY", StatusValidationError, "Access to `production` environment is not permitted for this key\n")
 
 	// Reading credentials (via SFTP/SCP) from a forbidden environment should fail
-	cmd := exec.Command(
-		"/usr/bin/scp",
-		"-s", // Needed for OpenSSH 8.9 which doesn't default to SFTP (can remove for OpenSSH9.0 and above)
-		"-o BatchMode=yes",
-		"-o StrictHostKeyChecking=no",
-		"-o UserKnownHostsFile=/dev/null",
-		"-o LogLevel ERROR",
-		"-i"+TEST_CLIENTKEYPATH,
-		"-P "+TEST_PORT,
-		TEST_USER+"@localhost:lucos_test/production/.env",
-		"/dev/null",
-	)
-	assertCommandOutput(test, cmd, 255, "", "/usr/bin/scp: Connection closed\r\n")
+	assertScpDenied(test, "lucos_test/production/.env")
 
 	// Linking credentials where either environment is outside the allowed environment should fail
 	assertSshCommandReturnsError(test, "lucos_test_client/production => lucos_test_server/production", StatusValidationError, "Access to environments outside of `development` is not permitted for this key\n")
