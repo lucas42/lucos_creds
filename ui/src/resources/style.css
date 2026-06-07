@@ -139,6 +139,15 @@ a:hover {
 	padding: 0 0.3em;
 	white-space: pre-wrap;
 }
+.scope {
+	border: solid 1px #555;
+	font-family: "Courier New", monospace;
+	padding: 0 0.3em;
+	background: #ddeeff77;
+	display: inline-flex;
+	font-size: 0.85em;
+	color: #224;
+}
 .note {
 	font-style: italic;
 	color: #222;
