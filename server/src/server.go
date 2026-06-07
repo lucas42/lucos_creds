@@ -34,6 +34,23 @@ func isPreVersionExchangeDisconnect(err error) bool {
 	return strings.Contains(err.Error(), "connection reset by peer")
 }
 
+// isEnvironmentAllowed returns true when the given environment is permitted by
+// the allowedEnvironment setting.  An empty allowedEnvironment means no
+// restriction (all environments are allowed).  A non-empty allowedEnvironment
+// is a comma-separated set of environment names; access is granted when
+// environment is a member of that set.
+func isEnvironmentAllowed(allowedEnvironment string, environment string) bool {
+	if allowedEnvironment == "" {
+		return true
+	}
+	for _, env := range strings.Split(allowedEnvironment, ",") {
+		if strings.TrimSpace(env) == environment {
+			return true
+		}
+	}
+	return false
+}
+
 func handleSshConnection(connection net.Conn, config *ssh.ServerConfig, datastore Datastore) {
 	slog.Debug("New connection received")
 	sshConnection, channels, globalRequests, err := ssh.NewServerConn(connection, config)
@@ -98,7 +115,7 @@ func handleSshConnection(connection net.Conn, config *ssh.ServerConfig, datastor
 								if allowedEnvironment != "" {
 									filtered := []SystemEnvironment{}
 									for _, se := range systemEnvironments {
-										if se.Environment == allowedEnvironment {
+										if isEnvironmentAllowed(allowedEnvironment, se.Environment) {
 											filtered = append(filtered, se)
 										}
 									}
@@ -117,7 +134,7 @@ func handleSshConnection(connection net.Conn, config *ssh.ServerConfig, datastor
 							if len(commandParts) == 2 {
 								system := commandParts[0]
 								environment := commandParts[1]
-								if allowedEnvironment != "" && environment != allowedEnvironment {
+								if !isEnvironmentAllowed(allowedEnvironment, environment) {
 									exitStatus.code = StatusValidationError
 									channel.Write([]byte("Access to `"+environment+"` environment is not permitted for this key\n"))
 								} else {
@@ -143,7 +160,7 @@ func handleSshConnection(connection net.Conn, config *ssh.ServerConfig, datastor
 								system := commandParts[0]
 								environment := commandParts[1]
 								key := strings.ToUpper(commandParts[2])
-								if allowedEnvironment != "" && environment != allowedEnvironment {
+								if !isEnvironmentAllowed(allowedEnvironment, environment) {
 									exitStatus.code = StatusValidationError
 									channel.Write([]byte("Access to `"+environment+"` environment is not permitted for this key\n"))
 								} else {
@@ -186,7 +203,7 @@ func handleSshConnection(connection net.Conn, config *ssh.ServerConfig, datastor
 								exitStatus.code = StatusBadSyntax
 								channel.Write([]byte("Syntax Error: Unexpected number of slashes\n"))
 							} else {
-								if allowedEnvironment != "" && clientParts[1] != allowedEnvironment {
+								if !isEnvironmentAllowed(allowedEnvironment, clientParts[1]) {
 									exitStatus.code = StatusValidationError
 									channel.Write([]byte("Access to environments outside of `"+allowedEnvironment+"` is not permitted for this key\n"))
 								} else {
@@ -218,7 +235,7 @@ func handleSshConnection(connection net.Conn, config *ssh.ServerConfig, datastor
 								if len(serverEnvAndScope) == 2 {
 									scope = serverEnvAndScope[1]
 								}
-								if allowedEnvironment != "" && (clientParts[1] != allowedEnvironment || serverEnvironment != allowedEnvironment) {
+								if !isEnvironmentAllowed(allowedEnvironment, clientParts[1]) || !isEnvironmentAllowed(allowedEnvironment, serverEnvironment) {
 									exitStatus.code = StatusValidationError
 									channel.Write([]byte("Access to environments outside of `"+allowedEnvironment+"` is not permitted for this key\n"))
 								} else {
@@ -246,7 +263,7 @@ func handleSshConnection(connection net.Conn, config *ssh.ServerConfig, datastor
 						} else if (!isValid) {
 							exitStatus.code = StatusBadSyntax
 							channel.Write([]byte("Syntax Error: Unexpected number of slashes\n"))
-						} else if (allowedEnvironment != "" && environment != allowedEnvironment) {
+						} else if !isEnvironmentAllowed(allowedEnvironment, environment) {
 							exitStatus.code = StatusValidationError
 							channel.Write([]byte("Access to `"+environment+"` environment is not permitted for this key\n"))
 						} else {
@@ -411,7 +428,7 @@ func handleSftpPackets(channel ssh.Channel, user string, allowedEnvironment stri
 				break
 			}
 			_, _, reqEnvironment, _ := parseFileHandle(request.Path)
-			if allowedEnvironment != "" && reqEnvironment != "" && reqEnvironment != allowedEnvironment {
+			if reqEnvironment != "" && !isEnvironmentAllowed(allowedEnvironment, reqEnvironment) {
 				err = errorAndCloseChannel(channel, request.Id, 3, "Access to `"+reqEnvironment+"` environment is not permitted for this key") // SSH_FX_PERMISSION_DENIED
 				break
 			}
@@ -494,7 +511,7 @@ func handleSftpPackets(channel ssh.Channel, user string, allowedEnvironment stri
 			}
 			slog.Debug("STAT command", "requestId", request.Id, "path", request.Path)
 			_, _, statEnvironment, _ := parseFileHandle(request.Path)
-			if allowedEnvironment != "" && statEnvironment != "" && statEnvironment != allowedEnvironment {
+			if statEnvironment != "" && !isEnvironmentAllowed(allowedEnvironment, statEnvironment) {
 				err = errorAndCloseChannel(channel, request.Id, 3, "Access to `"+statEnvironment+"` environment is not permitted for this key") // SSH_FX_PERMISSION_DENIED
 				break
 			}

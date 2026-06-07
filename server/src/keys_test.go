@@ -101,6 +101,6 @@ func TestCreatingDataKey(test *testing.T) {
 func TestAuthorizedKeys(test *testing.T) {
 	keyMap, permissionsMap := parseAuthorizedKeys("authorized_keys")
 	assertEqual(test, "Unexpected number of keys found in authorized_keys files", 6, len(keyMap))
-	assertEqual(test, "lucos-agent-coding-sandbox should be restricted to development environment", "development", permissionsMap["lucos-agent-coding-sandbox"].Extensions["allowed-environment"])
+	assertEqual(test, "lucos-agent-coding-sandbox should be restricted to development and test environments", "development,test", permissionsMap["lucos-agent-coding-sandbox"].Extensions["allowed-environment"])
 	assertEqual(test, "lucas should have no environment restrictions", "", permissionsMap["lucas"].Extensions["allowed-environment"])
 }
