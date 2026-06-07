@@ -625,6 +625,12 @@ func TestMultiEnvironmentRestrictedAccess(test *testing.T) {
 
 	// Cross-env link (client in set, server outside) should also fail
 	assertSshCommandReturnsError(test, "lucos_test_client/development => lucos_test_server/production", StatusValidationError, "Access to environments outside of `development,test` is not permitted for this key\n")
+
+	// rm (delete) from an allowed environment should succeed
+	assertSshCommandReturnsOutput(test, "rm lucos_test_client/development => lucos_test_server/development", "")
+
+	// rm (delete) from a denied environment should fail
+	assertSshCommandReturnsError(test, "rm lucos_test_client/production => lucos_test_server/production", StatusValidationError, "Access to environments outside of `development,test` is not permitted for this key\n")
 }
 
 // Tests that many simultaneous SCP fetches all return complete, correct results.
