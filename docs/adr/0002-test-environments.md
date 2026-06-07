@@ -1,7 +1,7 @@
 # ADR-0002: Test environments in lucos_creds
 
 **Date:** 2026-06-07
-**Status:** Proposed
+**Status:** Accepted
 **Discussion:** https://github.com/lucas42/lucos_creds/issues/363
 
 ## Context
