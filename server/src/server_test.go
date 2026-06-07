@@ -564,6 +564,75 @@ func TestEnvironmentRestrictedAccess(test *testing.T) {
 	assertSshCommandReturnsError(test, "lucos_test_client/development => lucos_test_server/production", StatusValidationError, "Access to environments outside of `development` is not permitted for this key\n")
 }
 
+// Tests that a key restricted to a comma-separated set of environments can access
+// every environment in that set, and is denied access to any environment outside it.
+func TestMultiEnvironmentRestrictedAccess(test *testing.T) {
+	serverSigner, _ := getKeyAndSigner(test)
+	clientSigner, clientPrivateKey := getKeyAndSigner(test)
+	permissions := ssh.Permissions{Extensions: map[string]string{"allowed-environment": "development,test"}}
+	_, closeServer := startSftpServer(
+		TEST_PORT, serverSigner,
+		initDatastore(TEST_DBPATH, TEST_SERVERKEYPATH, MockLoganne{}),
+		map[string]ssh.PublicKey{TEST_USER: clientSigner.PublicKey()},
+		map[string]ssh.Permissions{TEST_USER: permissions},
+	)
+	defer closeServer()
+	defer os.Remove(TEST_DBPATH)
+	defer os.Remove(TEST_SERVERKEYPATH)
+
+	err := os.WriteFile(TEST_CLIENTKEYPATH, clientPrivateKey, 0700)
+	assertNoError(test, err)
+	defer os.Remove(TEST_CLIENTKEYPATH)
+
+	// Writing to the first allowed environment should work
+	assertSshCommandReturnsOutput(test, "lucos_test/development/DEVKEY=devvalue", "")
+
+	// Writing to the second allowed environment should also work
+	assertSshCommandReturnsOutput(test, "lucos_test/test/TESTKEY=testvalue", "")
+
+	// Writing to a third (denied) environment should fail
+	assertSshCommandReturnsError(test, "lucos_test/production/PRODKEY=prodvalue", StatusValidationError, "Access to `production` environment is not permitted for this key\n")
+
+	// Reading from the first allowed environment should work
+	assertScpCommandReturnsContent(test, "lucos_test/development/.env", "DEVKEY=\"devvalue\"\nENVIRONMENT=\"development\"\nSYSTEM=\"lucos_test\"\n")
+
+	// Reading from the second allowed environment should work
+	assertScpCommandReturnsContent(test, "lucos_test/test/.env", "ENVIRONMENT=\"test\"\nSYSTEM=\"lucos_test\"\nTESTKEY=\"testvalue\"\n")
+
+	// Reading from a denied environment should fail
+	assertScpDenied(test, "lucos_test/production/.env")
+
+	// ls with no args should show both allowed environments
+	assertSshCommandReturnsOutput(test, "ls", "[{\"system\":\"lucos_test\",\"environment\":\"development\"},{\"system\":\"lucos_test\",\"environment\":\"test\"}]\n")
+
+	// ls on the first allowed environment should work
+	assertSshCommandReturnsOutput(test, "ls lucos_test/development/DEVKEY", "{\"system\":\"lucos_test\",\"environment\":\"development\",\"key\":\"DEVKEY\",\"type\":\"simple\",\"value\":\"devvalue\"}\n")
+
+	// ls on the second allowed environment should work
+	assertSshCommandReturnsOutput(test, "ls lucos_test/test/TESTKEY", "{\"system\":\"lucos_test\",\"environment\":\"test\",\"key\":\"TESTKEY\",\"type\":\"simple\",\"value\":\"testvalue\"}\n")
+
+	// ls on a denied environment should fail
+	assertSshCommandReturnsError(test, "ls lucos_test/production", StatusValidationError, "Access to `production` environment is not permitted for this key\n")
+
+	// Linking credentials within an allowed environment should work
+	assertSshCommandReturnsOutput(test, "lucos_test_client/development => lucos_test_server/development", "")
+
+	// Linking credentials within the other allowed environment should work
+	assertSshCommandReturnsOutput(test, "lucos_test_client/test => lucos_test_server/test", "")
+
+	// Linking credentials where either environment is outside the allowed set should fail
+	assertSshCommandReturnsError(test, "lucos_test_client/production => lucos_test_server/production", StatusValidationError, "Access to environments outside of `development,test` is not permitted for this key\n")
+
+	// Cross-env link (client in set, server outside) should also fail
+	assertSshCommandReturnsError(test, "lucos_test_client/development => lucos_test_server/production", StatusValidationError, "Access to environments outside of `development,test` is not permitted for this key\n")
+
+	// rm (delete) from an allowed environment should succeed
+	assertSshCommandReturnsOutput(test, "rm lucos_test_client/development => lucos_test_server/development", "")
+
+	// rm (delete) from a denied environment should fail
+	assertSshCommandReturnsError(test, "rm lucos_test_client/production => lucos_test_server/production", StatusValidationError, "Access to environments outside of `development,test` is not permitted for this key\n")
+}
+
 // Tests that many simultaneous SCP fetches all return complete, correct results.
 // This guards against concurrency issues in the SQLite layer under high load.
 func TestConcurrentEnvFileReads(test *testing.T) {
