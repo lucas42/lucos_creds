@@ -346,11 +346,12 @@ func (datastore Datastore) updateCredential(system string, environment string, k
 }
 
 func (datastore Datastore) updateLinkedCredential(client_system string, client_environment string, server_system string, server_environment string, scope string) (err error) {
-	// Validate scope using an allowlist: alphanumeric characters, colons (for resource:action convention), and commas (for scope lists).
+	// Validate scope using an allowlist: alphanumeric characters, colons (for resource:action convention),
+	// commas (for scope lists), and hyphens (for kebab-case domain names, e.g. media-metadata:read).
 	if scope != "" {
 		for _, ch := range scope {
-			if !((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == ':' || ch == ',') {
-				err = &ValidationError{fmt.Sprintf("scope contains invalid character '%c': only alphanumeric characters, colons and commas are permitted", ch)}
+			if !((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == ':' || ch == ',' || ch == '-') {
+				err = &ValidationError{fmt.Sprintf("scope contains invalid character '%c': only alphanumeric characters, colons, commas and hyphens are permitted", ch)}
 				return
 			}
 		}
