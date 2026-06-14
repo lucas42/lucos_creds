@@ -451,7 +451,14 @@ func TestCreateLinkedCredentialWithInvalidScopeOverSSH(test *testing.T) {
 	defer startTestServer(test)()
 
 	// Scope containing | (after the initial | env/scope delimiter) is not in the allowlist — must be rejected
-	assertSshCommandReturnsError(test, "lucos_test_client/production => lucos_test_server/production|photos:add|read", StatusValidationError, "Validation Error: scope contains invalid character '|': only alphanumeric characters, colons and commas are permitted\n")
+	assertSshCommandReturnsError(test, "lucos_test_client/production => lucos_test_server/production|photos:add|read", StatusValidationError, "Validation Error: scope contains invalid character '|': only alphanumeric characters, colons, commas and hyphens are permitted\n")
+}
+
+func TestCreateLinkedCredentialWithHyphenatedScopeOverSSH(test *testing.T) {
+	defer startTestServer(test)()
+
+	// Hyphenated scopes (e.g. media-metadata:read) must be accepted — kebab-case domain names are part of the estate vocabulary
+	assertSshCommandReturnsOutput(test, "lucos_test_client/production => lucos_test_server/production|media-metadata:read,media-metadata:write", "")
 }
 
 func TestDeleteCredentialOverSSH(test *testing.T) {
