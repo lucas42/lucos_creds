@@ -21,15 +21,19 @@ type Datastore struct {
 	dataBlockCipher cipher.AEAD
 	db *sqlx.DB
 	loganne LoganneInterface
+	knownScopes map[string]bool // nil = no vocabulary enforcement (used in tests)
 }
 
 
-func initDatastore(datastorePath string, dataKeyPath string, loganne LoganneInterface) (Datastore) {
+// initDatastore opens (or creates) the SQLite database and returns a configured
+// Datastore. knownScopes is the vocabulary to validate linked-credential scopes
+// against; pass nil to skip vocabulary validation (e.g. in unit tests).
+func initDatastore(datastorePath string, dataKeyPath string, loganne LoganneInterface, knownScopes map[string]bool) (Datastore) {
 	dataBlockCipher := getCreateBlockCipher(dataKeyPath)
 
 	db := sqlx.MustConnect("sqlite3", datastorePath+"?_busy_timeout=10000")
 	db.SetMaxOpenConns(1) // Serialise all DB operations through a single connection to prevent SQLite concurrency issues
-	datastore := Datastore{ dataBlockCipher, db, loganne }
+	datastore := Datastore{ dataBlockCipher, db, loganne, knownScopes }
 
 	datastore.db.MustExec("PRAGMA foreign_keys = ON;")
 	if !datastore.TableExists("credential") {
@@ -346,14 +350,40 @@ func (datastore Datastore) updateCredential(system string, environment string, k
 }
 
 func (datastore Datastore) updateLinkedCredential(client_system string, client_environment string, server_system string, server_environment string, scope string) (err error) {
-	// Validate scope using an allowlist: alphanumeric characters, colons (for resource:action convention),
-	// commas (for scope lists), and hyphens (for kebab-case domain names, e.g. media-metadata:read).
+	// 1. Character-class validation: alphanumeric, colons (resource:action), commas (lists),
+	//    hyphens (kebab-case domain names, e.g. media-metadata:read).
 	if scope != "" {
 		for _, ch := range scope {
 			if !((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == ':' || ch == ',' || ch == '-') {
 				err = &ValidationError{fmt.Sprintf("scope contains invalid character '%c': only alphanumeric characters, colons, commas and hyphens are permitted", ch)}
 				return
 			}
+		}
+	}
+
+	// 2. Vocabulary validation: each scope in the comma-separated list must appear in
+	//    the shared vocabulary (embedded from lucos_auth_scopes at build time).
+	//    Skipped when knownScopes is nil — that allows test datastores to use
+	//    arbitrary scope strings without needing fake vocabulary entries.
+	if len(datastore.knownScopes) > 0 && scope != "" {
+		for _, s := range strings.Split(scope, ",") {
+			s = strings.TrimSpace(s)
+			if !datastore.knownScopes[s] {
+				err = &ValidationError{fmt.Sprintf("scope %q is not in the vocabulary", s)}
+				return
+			}
+		}
+	}
+
+	// 3. Dev→prod read-only guard: a link from a non-production client to a production
+	//    server must carry only read-only scopes (ending in :read). This ensures that a
+	//    compromised dev key cannot write to production. Scopeless links are also rejected
+	//    because they would grant unrestricted access.
+	//    See ADR-0003 and lucos_creds#375 for the design rationale.
+	if server_environment == "production" && client_environment != "production" {
+		if !allScopesReadOnly(scope) {
+			err = &ValidationError{"only read-only scopes (ending in :read) are permitted on a link from non-production to production"}
+			return
 		}
 	}
 

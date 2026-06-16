@@ -106,7 +106,7 @@ func TestReadFileByHandleLogsCredentialCount(test *testing.T) {
 	dataKeyPath := "test_controller_data.key"
 	defer os.Remove(datastorePath)
 	defer os.Remove(dataKeyPath)
-	datastore := initDatastore(datastorePath, dataKeyPath, MockLoganne{})
+	datastore := initDatastore(datastorePath, dataKeyPath, MockLoganne{}, nil)
 	datastore.updateCredential("lucos_test", "production", "SECRET_ONE", "alpha")
 	datastore.updateCredential("lucos_test", "production", "SECRET_TWO", "beta")
 
@@ -144,7 +144,7 @@ func TestReadFileByHandleNoLogOnError(test *testing.T) {
 	dataKeyPath := "test_controller_data.key"
 	defer os.Remove(datastorePath)
 	defer os.Remove(dataKeyPath)
-	datastore := initDatastore(datastorePath, dataKeyPath, MockLoganne{})
+	datastore := initDatastore(datastorePath, dataKeyPath, MockLoganne{}, nil)
 
 	// Close the underlying DB to force an error on credential fetch
 	datastore.db.Close()

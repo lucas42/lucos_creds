@@ -1,0 +1,13 @@
+# Test stub — NOT the real scope vocabulary.
+#
+# This file exists only so `go build` and `go test` can satisfy the
+# `//go:embed scopes.yaml` directive in scopes.go. It contains clearly fake
+# scopes that are never valid in production.
+#
+# At Docker build time, `COPY --from=scopes /scopes.yaml ./` (Dockerfile)
+# overwrites this file with the real vocabulary from lucas42/lucos_auth_scopes.
+# The production binary therefore always embeds the real vocabulary; this stub
+# is never baked into a deployed image.
+scopes:
+  - test-only:read
+  - test-only:write
