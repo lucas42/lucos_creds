@@ -231,7 +231,7 @@ func getKeyAndSigner(test *testing.T) (signer ssh.Signer, privateKeyBytes []byte
 func startTestServer(test *testing.T) (func()) {
 	serverSigner, _ := getKeyAndSigner(test)
 	clientSigner, clientPrivateKey := getKeyAndSigner(test)
-	_, closeServer := startSftpServer(TEST_PORT, serverSigner, initDatastore(TEST_DBPATH, TEST_SERVERKEYPATH, MockLoganne{}), map[string]ssh.PublicKey{TEST_USER: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
+	_, closeServer := startSftpServer(TEST_PORT, serverSigner, initDatastore(TEST_DBPATH, TEST_SERVERKEYPATH, MockLoganne{}, nil), map[string]ssh.PublicKey{TEST_USER: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
 
 	err := os.WriteFile(TEST_CLIENTKEYPATH, clientPrivateKey, 0700)
 	assertNoError(test, err)
@@ -302,7 +302,7 @@ func TestDifferentUsersKey(test *testing.T) {
 	serverSigner, _ := getKeyAndSigner(test)
 	aliceSigner, alicePrivateKey := getKeyAndSigner(test)
 	bobSigner, _ := getKeyAndSigner(test)
-	_, closeServer := startSftpServer(TEST_PORT, serverSigner, initDatastore(TEST_DBPATH, TEST_SERVERKEYPATH, MockLoganne{}), map[string]ssh.PublicKey{"alice": aliceSigner.PublicKey(), "bob": bobSigner.PublicKey()}, map[string]ssh.Permissions{})
+	_, closeServer := startSftpServer(TEST_PORT, serverSigner, initDatastore(TEST_DBPATH, TEST_SERVERKEYPATH, MockLoganne{}, nil), map[string]ssh.PublicKey{"alice": aliceSigner.PublicKey(), "bob": bobSigner.PublicKey()}, map[string]ssh.Permissions{})
 	defer closeServer()
 
 	err := os.WriteFile(TEST_CLIENTKEYPATH, alicePrivateKey, 0700)
@@ -327,7 +327,7 @@ func TestStatePersistsRestart(test *testing.T) {
 	defer os.Remove(TEST_DBPATH)
 	defer os.Remove(TEST_SERVERKEYPATH)
 	clientSigner, clientPrivateKey := getKeyAndSigner(test)
-	_, closeFirstServer := startSftpServer(TEST_PORT, serverSigner, initDatastore(TEST_DBPATH, TEST_SERVERKEYPATH, MockLoganne{}), map[string]ssh.PublicKey{TEST_USER: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
+	_, closeFirstServer := startSftpServer(TEST_PORT, serverSigner, initDatastore(TEST_DBPATH, TEST_SERVERKEYPATH, MockLoganne{}, nil), map[string]ssh.PublicKey{TEST_USER: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
 
 	err := os.WriteFile(TEST_CLIENTKEYPATH, clientPrivateKey, 0700)
 	assertNoError(test, err)
@@ -337,7 +337,7 @@ func TestStatePersistsRestart(test *testing.T) {
 
 
 	closeFirstServer()
-	_, closeSecondServer := startSftpServer(TEST_PORT, serverSigner, initDatastore(TEST_DBPATH, TEST_SERVERKEYPATH, MockLoganne{}), map[string]ssh.PublicKey{TEST_USER: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
+	_, closeSecondServer := startSftpServer(TEST_PORT, serverSigner, initDatastore(TEST_DBPATH, TEST_SERVERKEYPATH, MockLoganne{}, nil), map[string]ssh.PublicKey{TEST_USER: clientSigner.PublicKey()}, map[string]ssh.Permissions{})
 	defer closeSecondServer()
 
 	assertSshCommandReturnsOutput(test, "lucos_test/production/OTHERKEY=green", "")
@@ -531,7 +531,7 @@ func TestEnvironmentRestrictedAccess(test *testing.T) {
 	permissions := ssh.Permissions{Extensions: map[string]string{"allowed-environment": "development"}}
 	_, closeServer := startSftpServer(
 		TEST_PORT, serverSigner,
-		initDatastore(TEST_DBPATH, TEST_SERVERKEYPATH, MockLoganne{}),
+		initDatastore(TEST_DBPATH, TEST_SERVERKEYPATH, MockLoganne{}, nil),
 		map[string]ssh.PublicKey{TEST_USER: clientSigner.PublicKey()},
 		map[string]ssh.Permissions{TEST_USER: permissions},
 	)
@@ -579,7 +579,7 @@ func TestMultiEnvironmentRestrictedAccess(test *testing.T) {
 	permissions := ssh.Permissions{Extensions: map[string]string{"allowed-environment": "development,test"}}
 	_, closeServer := startSftpServer(
 		TEST_PORT, serverSigner,
-		initDatastore(TEST_DBPATH, TEST_SERVERKEYPATH, MockLoganne{}),
+		initDatastore(TEST_DBPATH, TEST_SERVERKEYPATH, MockLoganne{}, nil),
 		map[string]ssh.PublicKey{TEST_USER: clientSigner.PublicKey()},
 		map[string]ssh.Permissions{TEST_USER: permissions},
 	)

@@ -1,0 +1,26 @@
+# lucOS authorisation scope vocabulary
+# Flat list of valid scope strings. The file IS the allowlist: a scope is valid
+# iff it appears here. The ":" prefix (where present) groups by resource/capability
+# DOMAIN for collision-avoidance — it is NOT an owning service and NOT a structural
+# level. Estate-wide capabilities sit bare.
+#
+# This vocabulary is build-time coupled: changing it requires a rebuild and
+# redeploy of lucos_aithne and lucos_creds to take effect.
+# (See lucos_aithne ADR-0001 §7 for design rationale.)
+#
+# Default-deny: add a scope only when a real consumer needs it.
+
+scopes:
+  - render-ui    # dev-only: GET-render any service's UI (e.g. lucos-ux page snapshots)
+  - aithne:admin # full admin surface: scope-grant authority + account enrolment/recovery (gates lucos_aithne#9)
+
+  # eolas scopes
+  - eolas:read   # read eolas metadata entities (GET endpoints on /metadata/*)
+  - eolas:write  # create/modify eolas metadata entities (POST /metadata/{type}/)
+
+  # media-metadata scopes
+  - media-metadata:read  # read media metadata (GET /v3/* and GET /v2/export)
+  - media-metadata:write # mutate media metadata (POST/PATCH/DELETE /v3/*)
+
+  # estate-wide bundled scopes
+  - webhook      # receive Loganne webhook events (POST /webhooks); held by lucos_loganne

@@ -28,7 +28,7 @@ func main() {
 	done, _ := startSftpServer(
 		port,
 		getCreateSshSigner("/var/lib/creds_store/server_key"),
-		initDatastore("/var/lib/creds_store/creds.sqlite", "/var/lib/creds_store/data_key", loganne),
+		initDatastore("/var/lib/creds_store/creds.sqlite", "/var/lib/creds_store/data_key", loganne, loadKnownScopes()),
 		authorizedKeys,
 		userPermissions,
 	)
