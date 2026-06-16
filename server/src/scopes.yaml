@@ -1,26 +1,13 @@
-# lucOS authorisation scope vocabulary
-# Flat list of valid scope strings. The file IS the allowlist: a scope is valid
-# iff it appears here. The ":" prefix (where present) groups by resource/capability
-# DOMAIN for collision-avoidance — it is NOT an owning service and NOT a structural
-# level. Estate-wide capabilities sit bare.
+# Test stub — NOT the real scope vocabulary.
 #
-# This vocabulary is build-time coupled: changing it requires a rebuild and
-# redeploy of lucos_aithne and lucos_creds to take effect.
-# (See lucos_aithne ADR-0001 §7 for design rationale.)
+# This file exists only so `go build` and `go test` can satisfy the
+# `//go:embed scopes.yaml` directive in scopes.go. It contains clearly fake
+# scopes that are never valid in production.
 #
-# Default-deny: add a scope only when a real consumer needs it.
-
+# At Docker build time, `COPY --from=scopes /scopes.yaml ./` (Dockerfile)
+# overwrites this file with the real vocabulary from lucas42/lucos_auth_scopes.
+# The production binary therefore always embeds the real vocabulary; this stub
+# is never baked into a deployed image.
 scopes:
-  - render-ui    # dev-only: GET-render any service's UI (e.g. lucos-ux page snapshots)
-  - aithne:admin # full admin surface: scope-grant authority + account enrolment/recovery (gates lucos_aithne#9)
-
-  # eolas scopes
-  - eolas:read   # read eolas metadata entities (GET endpoints on /metadata/*)
-  - eolas:write  # create/modify eolas metadata entities (POST /metadata/{type}/)
-
-  # media-metadata scopes
-  - media-metadata:read  # read media metadata (GET /v3/* and GET /v2/export)
-  - media-metadata:write # mutate media metadata (POST/PATCH/DELETE /v3/*)
-
-  # estate-wide bundled scopes
-  - webhook      # receive Loganne webhook events (POST /webhooks); held by lucos_loganne
+  - test-only:read
+  - test-only:write

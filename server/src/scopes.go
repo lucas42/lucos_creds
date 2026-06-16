@@ -5,12 +5,13 @@ import (
 	"strings"
 )
 
-// scopesYAML holds the canonical scope vocabulary, embedded at build time from
-// scopes.yaml (populated by the lucos_auth_scopes Docker image in the Dockerfile).
-// Run scripts/fetch-scopes.sh (or `go generate ./src` from the server/ directory)
-// to refresh the local copy whenever the lucos_auth_scopes image tag is bumped.
+// scopesYAML is embedded from scopes.yaml at compile time.
 //
-//go:generate ../scripts/fetch-scopes.sh
+// server/src/scopes.yaml is a test stub with clearly fake scopes. At Docker
+// build time the Dockerfile overwrites it with the real vocabulary from
+// lucas42/lucos_auth_scopes before `go build` runs, so the deployed binary
+// always embeds the real vocabulary — never this stub.
+//
 //go:embed scopes.yaml
 var scopesYAML []byte
 
