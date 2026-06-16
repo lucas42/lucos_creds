@@ -24,11 +24,18 @@ func main() {
 		source: "lucos_creds",
 		ui_domain: os.Getenv("APP_ORIGIN"),
 	}
+	knownScopes := loadKnownScopes()
+	if len(knownScopes) == 0 {
+		slog.Error("Scope vocabulary is empty — refusing to start with disabled validation")
+		os.Exit(1)
+	}
+	slog.Info("Loaded scope vocabulary", "count", len(knownScopes))
+
 	authorizedKeys, userPermissions := parseAuthorizedKeys("authorized_keys")
 	done, _ := startSftpServer(
 		port,
 		getCreateSshSigner("/var/lib/creds_store/server_key"),
-		initDatastore("/var/lib/creds_store/creds.sqlite", "/var/lib/creds_store/data_key", loganne, loadKnownScopes()),
+		initDatastore("/var/lib/creds_store/creds.sqlite", "/var/lib/creds_store/data_key", loganne, knownScopes),
 		authorizedKeys,
 		userPermissions,
 	)
