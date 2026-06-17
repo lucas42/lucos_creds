@@ -1,6 +1,6 @@
 # Vocabulary stage: canonical scope vocabulary from lucos_auth_scopes.
 # Named stage so Dependabot can track the tag + digest.
-FROM lucas42/lucos_auth_scopes:1.1.0@sha256:e40c137ee72412f121369196dea62672f74ba93279e11f5c4efba5753930e3cd AS scopes
+FROM lucas42/lucos_auth_scopes:1.2.0@sha256:c4e9b6087166f65836cf4859774303f3482796a353a545b91e1e138f4eeb343c AS scopes
 
 FROM golang:1.26 AS builder
 ARG VERSION
