@@ -1,6 +1,6 @@
 import { URL } from 'url';
 import webpack from 'webpack';
-import TerserPlugin from 'terser-webpack-plugin';
+import MinimizerPlugin from 'minimizer-webpack-plugin';
 import { hashElement } from 'folder-hash';
 export default async () => {
 	return {
@@ -18,8 +18,8 @@ export default async () => {
 			}),
 		],
 		optimization: {
-			// Stop the terser plugin messing with the banner plugin
-			minimizer: [new TerserPlugin({
+			// Stop the minimizer plugin messing with the banner plugin
+			minimizer: [new MinimizerPlugin({
 				extractComments: false,
 			})],
 		},
