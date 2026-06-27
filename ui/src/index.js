@@ -11,9 +11,11 @@ const app = express();
 app.auth = authMiddleware;
 const port = process.env.PORT || 3000;
 
-// Trust X-Forwarded-Proto from the reverse proxy so req.protocol is 'https' in production.
-// Required for correct ?next= return URLs in aithne login redirects.
-app.set('trust proxy', true);
+// Trust one upstream proxy (the lucos reverse proxy) so req.protocol reflects
+// X-Forwarded-Proto correctly in production. Required for correct ?next= return
+// URLs in aithne login redirects. Value 1 is more conservative than true (which
+// trusts all upstream proxies unconditionally).
+app.set('trust proxy', 1);
 
 // Expose AITHNE_ORIGIN to all EJS templates for the navbar keepalive attribute.
 app.locals.AITHNE_ORIGIN = process.env.AITHNE_ORIGIN ?? 'https://aithne.l42.eu';

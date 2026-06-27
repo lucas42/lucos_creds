@@ -179,6 +179,20 @@ test('middleware: valid JWT with empty scopes → 403 (not redirect)', async () 
 	assert.equal(res.render.mock.calls[0].arguments[0], '403');
 });
 
+test('middleware: valid JWT with unknown principal_class → 403 (fail-closed guard)', async () => {
+	// Unknown principal types (future additions) must not silently gain access.
+	const fakePayload = { sub: 'service:1', principal_class: 'service', scopes: ['creds:admin'], exp: 9999999999 };
+	_setVerifier(async () => ({ payload: fakePayload }));
+	const req = makeReq({ cookie: 'aithne_session=valid.jwt.unknown-class' });
+	const res = makeRes();
+	const next = mock.fn();
+	await middleware(req, res, next);
+	assert.equal(next.mock.calls.length, 0, 'next() must not be called for unknown principal_class');
+	assert.equal(res.redirect.mock.calls.length, 0, 'must not redirect for unknown principal_class');
+	assert.equal(res.status.mock.calls[0].arguments[0], 403, 'must return 403 for unknown principal_class');
+	assert.equal(res.render.mock.calls[0].arguments[0], '403');
+});
+
 test('middleware: expired JWT → redirects to aithne login (fail-closed)', async () => {
 	_setVerifier(async () => { throw Object.assign(new Error('JWTExpired'), { code: 'ERR_JWT_EXPIRED' }); });
 	const req = makeReq({ cookie: 'aithne_session=expired.jwt.token' });
