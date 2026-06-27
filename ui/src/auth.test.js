@@ -22,6 +22,7 @@ function makeRes() {
 	res.redirect = mock.fn();
 	res.status = mock.fn(() => res);
 	res.send = mock.fn();
+	res.render = mock.fn();
 	return res;
 }
 
@@ -147,7 +148,9 @@ test('middleware: valid JWT with creds:admin → calls next() and sets res.auth_
 	assert.deepEqual(res.auth_agent, fakePayload);
 });
 
-test('middleware: valid JWT missing creds:admin → redirects to aithne login', async () => {
+test('middleware: valid JWT missing creds:admin → 403 (not redirect — avoids loop)', async () => {
+	// Branch 2: valid token, wrong scope. Must NOT redirect — re-authenticating
+	// yields the same scopeless token, causing an infinite redirect loop.
 	const fakePayload = { sub: 'human:2', principal_class: 'human', scopes: ['eolas:read'], exp: 9999999999 };
 	_setVerifier(async () => ({ payload: fakePayload }));
 	const req = makeReq({ cookie: 'aithne_session=valid.jwt.no-scope' });
@@ -155,10 +158,15 @@ test('middleware: valid JWT missing creds:admin → redirects to aithne login', 
 	const next = mock.fn();
 	await middleware(req, res, next);
 	assert.equal(next.mock.calls.length, 0, 'next() must not be called without scope');
-	assert.equal(res.redirect.mock.calls.length, 1, 'must redirect when scope missing');
+	assert.equal(res.redirect.mock.calls.length, 0, 'must NOT redirect on missing scope (would loop)');
+	assert.equal(res.status.mock.calls.length, 1, 'must set status');
+	assert.equal(res.status.mock.calls[0].arguments[0], 403, 'status must be 403');
+	assert.equal(res.render.mock.calls.length, 1, 'must render 403 template');
+	assert.equal(res.render.mock.calls[0].arguments[0], '403', 'must render the 403 view');
 });
 
-test('middleware: valid JWT with empty scopes → redirects (no scope = no access)', async () => {
+test('middleware: valid JWT with empty scopes → 403 (not redirect)', async () => {
+	// Branch 2: verified token, zero scopes — 403 not redirect.
 	const fakePayload = { sub: 'human:3', scopes: [], exp: 9999999999 };
 	_setVerifier(async () => ({ payload: fakePayload }));
 	const req = makeReq({ cookie: 'aithne_session=valid.jwt.empty-scopes' });
@@ -166,7 +174,9 @@ test('middleware: valid JWT with empty scopes → redirects (no scope = no acces
 	const next = mock.fn();
 	await middleware(req, res, next);
 	assert.equal(next.mock.calls.length, 0);
-	assert.equal(res.redirect.mock.calls.length, 1);
+	assert.equal(res.redirect.mock.calls.length, 0, 'must NOT redirect on missing scope');
+	assert.equal(res.status.mock.calls[0].arguments[0], 403);
+	assert.equal(res.render.mock.calls[0].arguments[0], '403');
 });
 
 test('middleware: expired JWT → redirects to aithne login (fail-closed)', async () => {

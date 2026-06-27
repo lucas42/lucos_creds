@@ -1,0 +1,19 @@
+<html>
+	<head>
+		<title>LucOs Credentials — Access Denied</title>
+		<meta name="viewport" content="initial-scale=1.0, user-scalable=no, width=device-width" />
+		<link href="/style.css" rel="stylesheet" />
+		<link rel="icon" href="/icon.png" />
+	</head>
+	<body>
+		<lucos-navbar bg-colour="#334" aithne-origin="<%= AITHNE_ORIGIN %>">Creds</lucos-navbar>
+		<nav id="breadcrumbs">
+			<span>Credentials</span>
+		</nav>
+		<main>
+			<h1>Access Denied</h1>
+			<p>Your account does not have the <code><%= requiredScope %></code> scope required to access the Credentials admin UI.</p>
+			<p>Contact your administrator to request access.</p>
+		</main>
+	</body>
+</html>

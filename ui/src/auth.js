@@ -88,10 +88,14 @@ export function csrfMiddleware(req, res, next) {
 
 /**
  * Provide express middleware function for checking authentication.
- * Reads the aithne_session cookie, verifies the JWT locally via JWKS, and
- * checks for the creds:admin scope (ADR-0002 §4/§6: scope-based access control).
- * Unauthenticated or unauthorised requests are redirected to the aithne login
- * page (re-authenticating may yield a fresh token once a grant is in place).
+ *
+ * Implements the three-branch ADR-0002 §4 pattern:
+ *   Branch 1 — valid JWT + creds:admin scope → proceed (next())
+ *   Branch 2 — valid JWT + missing creds:admin → styled 403 (not redirect)
+ *              Redirecting would loop: a scopeless token re-auths to the same
+ *              scopeless token. A clear 403 tells the user they need the scope
+ *              rather than bouncing them through login indefinitely.
+ *   Branch 3 — no/invalid JWT → 302 redirect to aithne login
  */
 export async function middleware(req, res, next) {
 	const cookies = parseCookies(req.headers.cookie);
@@ -105,19 +109,22 @@ export async function middleware(req, res, next) {
 				clockTolerance: 30,  // 30-second skew tolerance per aithne local-verification-contract
 				algorithms: ['ES256'],  // pin to ES256 — defence-in-depth against algorithm confusion
 			});
+			// Branch 1: valid token with required scope — proceed
 			if (hasCredsAccess(payload.scopes ?? [])) {
 				res.auth_agent = payload;
 				return next();
 			}
-			// JWT is valid but the principal lacks creds:admin. Redirecting to login
-			// gives them a fresh token if the scope was granted since their last auth.
+			// Branch 2: valid token but principal lacks creds:admin.
+			// Return a styled 403 rather than redirecting — re-authenticating would
+			// yield the same scopeless token, creating an infinite redirect loop.
 			console.warn('JWT missing required creds:admin scope:', payload.sub);
+			return res.status(403).render('403', { requiredScope: 'creds:admin' });
 		} catch (error) {
 			console.error('JWT verification failed:', error.message);
 		}
 	}
 
-	// Not authenticated / not authorised — redirect to aithne login.
+	// Branch 3: no/invalid token — redirect to aithne login.
 	// req.protocol is populated from X-Forwarded-Proto by Express when trust proxy
 	// is set (configured in index.js), so this correctly returns 'https' in production.
 	const returnUrl = `${req.protocol}://${req.headers.host}${req.originalUrl}`;
