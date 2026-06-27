@@ -4,13 +4,14 @@
   "description": "User Interface for lucos_creds",
   "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node --test src/auth.test.js",
     "build": "webpack",
     "start": "node index.js"
   },
   "dependencies": {
     "ejs": "^6.0.1",
-    "express": "^5.2.1"
+    "express": "^5.2.1",
+    "jose": "^6.0.0"
   },
   "devDependencies": {
     "folder-hash": "^4.1.3",
