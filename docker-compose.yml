@@ -47,6 +47,8 @@ services:
     environment:
       - PORT
       - UI_PRIVATE_SSH_KEY
+      - AITHNE_ORIGIN
+      - AITHNE_JWKS_URL
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:${PORT}/_info"]
       interval: 10s

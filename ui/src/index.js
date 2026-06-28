@@ -1,6 +1,6 @@
 import express from 'express';
 import fs from 'fs';
-import { middleware as authMiddleware } from './auth.js';
+import { middleware as authMiddleware, csrfMiddleware } from './auth.js';
 import child_process from 'child_process';
 import { promisify } from 'util';
 const exec = promisify(child_process.exec);
@@ -10,6 +10,15 @@ const unlink = promisify(fs.unlink);
 const app = express();
 app.auth = authMiddleware;
 const port = process.env.PORT || 3000;
+
+// Trust one upstream proxy (the lucos reverse proxy) so req.protocol reflects
+// X-Forwarded-Proto correctly in production. Required for correct ?next= return
+// URLs in aithne login redirects. Value 1 is more conservative than true (which
+// trusts all upstream proxies unconditionally).
+app.set('trust proxy', 1);
+
+// Expose AITHNE_ORIGIN to all EJS templates for the navbar keepalive attribute.
+app.locals.AITHNE_ORIGIN = process.env.AITHNE_ORIGIN ?? 'https://aithne.l42.eu';
 
 function validateSshKey(value, varName) {
 	if (!value) throw new Error(`${varName} is empty`);
@@ -47,6 +56,10 @@ app.get('/_info', catchErrors(async (req, res) => {
 }));
 
 app.use((req, res, next) => app.auth(req, res, next));
+
+// CSRF protection: reject POST requests whose Origin header doesn't match the service host.
+// Runs after auth so unauthenticated requests are redirected to login first.
+app.use((req, res, next) => csrfMiddleware(req, res, next));
 
 app.get('/', catchErrors(async (req, res) => {
 	const systemEnvironments = await getSystemEnvironments();
