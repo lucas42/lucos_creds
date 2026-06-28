@@ -46,6 +46,7 @@ services:
     restart: always
     environment:
       - PORT
+      - ENVIRONMENT
       - UI_PRIVATE_SSH_KEY
       - AITHNE_ORIGIN
       - AITHNE_JWKS_URL
