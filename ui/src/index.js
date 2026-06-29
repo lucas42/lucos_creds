@@ -31,6 +31,7 @@ validateSshKey(process.env.UI_PRIVATE_SSH_KEY, 'UI_PRIVATE_SSH_KEY');
 fs.writeFileSync('/root/.ssh/id_ed25519', process.env.UI_PRIVATE_SSH_KEY);
 
 function assertSafeIdentifier(value, fieldName) {
+	if (value == null || value === '') throw new Error(`Invalid ${fieldName}: missing or empty`);
 	if (!/^[a-zA-Z0-9_-]+$/.test(value)) {
 		throw new Error(`Invalid ${fieldName}: "${value}"`);
 	}
@@ -278,6 +279,9 @@ app.post('/update-linked-credential', catchErrors(async (req, res) => {
 	assertSafeIdentifier(clientenvironment, 'clientenvironment');
 	assertSafeIdentifier(serversystem, 'serversystem');
 	assertSafeIdentifier(serverenvironment, 'serverenvironment');
+	// scope is intentionally not passed through assertSafeIdentifier — legitimate scope values
+	// (e.g. "arachne:read") contain ":" which the alphanumeric allowlist would reject.
+	// With execFile there is no local shell, so scope reaches the SSH server as a literal string.
 	const serverEnvWithScope = scope ? `${serverenvironment}|${scope}` : serverenvironment;
 	try {
 		await sshExec(`${clientsystem}/${clientenvironment} => ${serversystem}/${serverEnvWithScope}`);
