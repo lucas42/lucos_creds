@@ -1,9 +1,9 @@
 import express from 'express';
 import fs from 'fs';
 import { middleware as authMiddleware, csrfMiddleware } from './auth.js';
-import child_process from 'child_process';
+import { execFile as execFileCb } from 'child_process';
 import { promisify } from 'util';
-const exec = promisify(child_process.exec);
+const execFile = promisify(execFileCb);
 const readFile = promisify(fs.readFile);
 const unlink = promisify(fs.unlink);
 
@@ -29,6 +29,13 @@ function validateSshKey(value, varName) {
 }
 validateSshKey(process.env.UI_PRIVATE_SSH_KEY, 'UI_PRIVATE_SSH_KEY');
 fs.writeFileSync('/root/.ssh/id_ed25519', process.env.UI_PRIVATE_SSH_KEY);
+
+function assertSafeIdentifier(value, fieldName) {
+	if (value == null || value === '') throw new Error(`Invalid ${fieldName}: missing or empty`);
+	if (!/^[a-zA-Z0-9_-]+$/.test(value)) {
+		throw new Error(`Invalid ${fieldName}: "${value}"`);
+	}
+}
 
 app.set('view engine', 'ejs');
 app.use(express.json());
@@ -93,6 +100,8 @@ app.get('/system/:system', catchErrors(async (req, res) => {
 }));
 
 app.get('/system/:system/:environment', catchErrors(async (req, res) => {
+	assertSafeIdentifier(req.params.system, 'system');
+	assertSafeIdentifier(req.params.environment, 'environment');
 	const creds = await getCredList(req.params.system, req.params.environment);
 	res.render('cred-list', {
 		creds,
@@ -102,6 +111,9 @@ app.get('/system/:system/:environment', catchErrors(async (req, res) => {
 }));
 
 app.get('/system/:system/:environment/:key', catchErrors(async (req, res) => {
+	assertSafeIdentifier(req.params.system, 'system');
+	assertSafeIdentifier(req.params.environment, 'environment');
+	assertSafeIdentifier(req.params.key, 'key');
 	try {
 		const credential = await getCredential(req.params.system, req.params.environment, req.params.key);
 		res.render('view-credential', credential);
@@ -135,6 +147,9 @@ app.get('/update-simple-credential', catchErrors(async (req, res) => {
 }));
 app.post('/update-simple-credential', catchErrors(async (req, res) => {
 	const { system, environment, key, value } = req.body;
+	assertSafeIdentifier(system, 'system');
+	assertSafeIdentifier(environment, 'environment');
+	assertSafeIdentifier(key, 'key');
 	const params = new URLSearchParams({system, environment, key});
 	if (!value) { // Doing an update without a value causes a delete - check the user wants to do this by redirecting to the delete page instead
 		res.redirect(303, '/delete-simple-credential?'+params.toString());
@@ -162,6 +177,9 @@ app.get('/delete-simple-credential', catchErrors(async (req, res) => {
 }));
 app.post('/delete-simple-credential', catchErrors(async (req, res) => {
 	const { system, environment, key } = req.body;
+	assertSafeIdentifier(system, 'system');
+	assertSafeIdentifier(environment, 'environment');
+	assertSafeIdentifier(key, 'key');
 	try {
 		await sshExec(`${system}/${environment}/${key}=`);
 	} catch (error) {
@@ -189,6 +207,9 @@ app.get('/delete-linked-credential', catchErrors(async (req, res) => {
 }));
 app.post('/delete-linked-credential', catchErrors(async (req, res) => {
 	const { clientsystem, clientenvironment, serversystem, serverenvironment } = req.body;
+	assertSafeIdentifier(clientsystem, 'clientsystem');
+	assertSafeIdentifier(clientenvironment, 'clientenvironment');
+	assertSafeIdentifier(serversystem, 'serversystem');
 	try {
 		await sshExec(`rm ${clientsystem}/${clientenvironment} => ${serversystem}`);
 	} catch (error) {
@@ -254,6 +275,13 @@ app.post('/update-linked-credential', catchErrors(async (req, res) => {
 		res.redirect(303, '/update-linked-credential?'+params.toString());
 		return;
 	}
+	assertSafeIdentifier(clientsystem, 'clientsystem');
+	assertSafeIdentifier(clientenvironment, 'clientenvironment');
+	assertSafeIdentifier(serversystem, 'serversystem');
+	assertSafeIdentifier(serverenvironment, 'serverenvironment');
+	// scope is intentionally not passed through assertSafeIdentifier — legitimate scope values
+	// (e.g. "arachne:read") contain ":" which the alphanumeric allowlist would reject.
+	// With execFile there is no local shell, so scope reaches the SSH server as a literal string.
 	const serverEnvWithScope = scope ? `${serverenvironment}|${scope}` : serverenvironment;
 	try {
 		await sshExec(`${clientsystem}/${clientenvironment} => ${serversystem}/${serverEnvWithScope}`);
@@ -319,7 +347,7 @@ async function withRetry(fn, maxRetries = 3, backoffMs = 5000) {
 }
 
 async function sshExec(command) {
-	const output = await exec(`ssh lucos_creds \"${command.replace('"','\\"')}\"`);
+	const output = await execFile('ssh', ['lucos_creds', command]);
 	return output.stdout;
 }
 
