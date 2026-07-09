@@ -169,13 +169,6 @@ export async function middleware(req, res, next) {
 				clockTolerance: 30,  // 30-second skew tolerance per aithne local-verification-contract
 				algorithms: ['ES256'],  // pin to ES256 — defence-in-depth against algorithm confusion
 			});
-			// Fail-closed against future unknown principal types silently gaining
-			// access — mirrors the allowlist in every other Wave 4 migration.
-			const principalClass = payload.principal_class;
-			if (!['human', 'agent'].includes(principalClass)) {
-				console.warn('JWT rejected: unknown principal_class %s for sub %s', principalClass, payload.sub);
-				return res.status(403).render('403', { requiredScope: 'creds:admin' });
-			}
 			// Branch 1: valid token with required scope — proceed
 			if (hasCredsAccess(payload.scopes ?? [])) {
 				res.auth_agent = payload;
