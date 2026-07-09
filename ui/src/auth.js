@@ -1,4 +1,4 @@
-import { jwtVerify, createRemoteJWKSet } from 'jose';
+import { jwtVerify, createRemoteJWKSet, createLocalJWKSet } from 'jose';
 
 const AITHNE_ORIGIN = process.env.AITHNE_ORIGIN ?? 'https://aithne.l42.eu';
 // AITHNE_JWKS_URL overrides the JWKS fetch address (e.g. Docker bridge IP in dev).
@@ -8,10 +8,70 @@ const AITHNE_ISSUER = AITHNE_ORIGIN;
 const AITHNE_AUDIENCE = 'l42.eu';
 const AITHNE_LOGIN_URL = `${AITHNE_ORIGIN}/auth/login`;
 
-// JWKS key set with automatic caching and kid-based rotation support.
+/**
+ * True if a jose error indicates a JWKS infrastructure failure (aithne
+ * unreachable or timed out) rather than a JWT validation failure (bad
+ * signature, expired token, wrong audience, or an unrecognised kid).
+ *
+ * Deliberately narrower than "any ERR_JWKS_* code": jose's
+ * ERR_JWKS_NO_MATCHING_KEY (thrown by RemoteJWKSet.getKey() when a token's
+ * kid isn't found) already reflects an internal reload-and-retry against the
+ * freshest key set jose could fetch — by the time it surfaces, aithne has
+ * responded fine and the kid genuinely isn't in it. Treating that as an
+ * infra failure would log a false "aithne unreachable" warning on routine
+ * token rejections (rotated-out kids, forged tokens) and trigger a fallback
+ * against a last-known-good snapshot that can never be fresher than what
+ * jose just checked — so it can never actually rescue the request.
+ *
+ * jose propagates raw Node network errors (ECONNREFUSED, ENOTFOUND) unwrapped
+ * with no ERR_JWKS_* code — these must be caught explicitly as infra failures
+ * too.
+ */
+export function isJWKSInfraError(error) {
+	return error.code === 'ERR_JWKS_TIMEOUT' || error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND';
+}
+
+/**
+ * Wrap a jose remote JWKS getter (as returned by createRemoteJWKSet) with
+ * serve-stale behaviour, per aithne's docs/local-verification-contract.md §1.
+ *
+ * createRemoteJWKSet does NOT serve stale keys by default: a failed re-fetch
+ * (5-minute cache expiry, or an unrecognised kid triggering a re-fetch)
+ * throws straight through, even though the previously-fetched key set is
+ * still valid. That turns a brief aithne outage into a 401 storm for every
+ * user. This wrapper snapshots the key set after every successful fetch and,
+ * on a JWKS infrastructure failure, falls back to verifying against that
+ * last-known-good snapshot instead of rejecting outright. A kid that is
+ * genuinely unknown (not present even in the last-known-good set) still
+ * fails verification and is rejected.
+ *
+ * Exported (rather than only used internally) so it can be unit tested
+ * against a fake remote getter, without needing a live JWKS endpoint.
+ */
+export function createServeStaleJWKS(remoteJWKS) {
+	let lastKnownGoodJWKS = null;
+
+	return async function serveStaleJWKS(protectedHeader, token) {
+		try {
+			const key = await remoteJWKS(protectedHeader, token);
+			lastKnownGoodJWKS = remoteJWKS.jwks() ?? lastKnownGoodJWKS;
+			return key;
+		} catch (error) {
+			if (isJWKSInfraError(error) && lastKnownGoodJWKS) {
+				console.warn('JWKS fetch failed, serving last-known-good key set:', error.message);
+				const staleJWKS = createLocalJWKSet(lastKnownGoodJWKS);
+				return staleJWKS(protectedHeader, token);
+			}
+			throw error;
+		}
+	};
+}
+
+// JWKS key set with automatic caching, kid-based rotation support, and
+// serve-stale fallback on fetch failure (see createServeStaleJWKS above).
 // jose's createRemoteJWKSet fetches on first use, caches for 5 minutes,
 // and re-fetches when a token's kid is not found in the cache.
-const JWKS = createRemoteJWKSet(AITHNE_JWKS_URL);
+const JWKS = createServeStaleJWKS(createRemoteJWKSet(AITHNE_JWKS_URL));
 
 // Internal verify function — replaced in tests via _setVerifier.
 let _verifyFn = (token, jwks, opts) => jwtVerify(token, jwks, opts);
@@ -127,7 +187,16 @@ export async function middleware(req, res, next) {
 			console.warn('JWT missing required creds:admin scope:', payload.sub);
 			return res.status(403).render('403', { requiredScope: 'creds:admin' });
 		} catch (error) {
-			console.error('JWT verification failed:', error.message);
+			// Distinguish JWKS infrastructure failures (aithne unreachable, timed out)
+			// from JWT validation failures (bad signature, expired token, wrong
+			// audience, or an unrecognised kid). Reaching here for a JWKS infra
+			// error means serve-stale (above) also failed: either there was no
+			// last-known-good key set yet, or the kid genuinely isn't in it.
+			if (isJWKSInfraError(error)) {
+				console.warn('JWKS infrastructure error (aithne unreachable):', error.message);
+			} else {
+				console.error('JWT verification failed:', error.message);
+			}
 		}
 	}
 
