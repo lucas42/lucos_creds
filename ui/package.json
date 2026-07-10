@@ -11,7 +11,7 @@
   "dependencies": {
     "ejs": "^6.0.1",
     "express": "^5.2.1",
-    "lucos_aithne_jsclient": "^1.1.1"
+    "lucos_aithne_jsclient": "^1.1.2"
   },
   "devDependencies": {
     "folder-hash": "^4.1.3",
