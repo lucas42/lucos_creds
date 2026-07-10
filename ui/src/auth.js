@@ -7,19 +7,23 @@ const REQUIRED_SCOPE = 'creds:admin';
 // jwksUrl overrides only the JWKS fetch address (e.g. Docker bridge IP in
 // dev); the library derives the issuer check and loginUrl() from origin
 // regardless, so that invariant can't drift here.
-const aithne = createAithneClient({
+const AITHNE_CONFIG = {
 	origin: process.env.AITHNE_ORIGIN,
 	jwksUrl: process.env.AITHNE_JWKS_URL,
 	appOrigin: process.env.APP_ORIGIN,
 	environment: process.env.ENVIRONMENT,
-});
+};
+let aithne = createAithneClient(AITHNE_CONFIG);
 
 /**
- * Override the JWT verifier. For testing only — do not call in production code.
- * Allows unit tests to exercise the middleware without a live JWKS endpoint.
+ * Override the JWT verifier. For testing only — do not call in production
+ * code. lucos_aithne_jsclient v1.1.2 made _verifyFn construction-time-only
+ * (lucas42/lucos_aithne_jsclient#7, security hardening) — there's no runtime
+ * setter to forward to anymore, so this reconstructs the client instead of
+ * mutating one.
  */
 export function _setVerifier(fn) {
-	aithne._setVerifier(fn);
+	aithne = createAithneClient({ ...AITHNE_CONFIG, _verifyFn: fn });
 }
 
 /**
