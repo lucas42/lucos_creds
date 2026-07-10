@@ -10,6 +10,7 @@ const REQUIRED_SCOPE = 'creds:admin';
 const aithne = createAithneClient({
 	origin: process.env.AITHNE_ORIGIN,
 	jwksUrl: process.env.AITHNE_JWKS_URL,
+	appOrigin: process.env.APP_ORIGIN,
 	environment: process.env.ENVIRONMENT,
 });
 
