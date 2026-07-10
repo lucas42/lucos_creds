@@ -2,26 +2,6 @@ import { createAithneClient } from 'lucos_aithne_jsclient';
 
 const REQUIRED_SCOPE = 'creds:admin';
 
-// Verification, JWKS serve-stale, and scope-gating are all owned by
-// lucos_aithne_jsclient (ADR-0001) — this module owns only presentation.
-// jwksUrl overrides only the JWKS fetch address (e.g. Docker bridge IP in
-// dev); the library derives the issuer check and loginUrl() from origin
-// regardless, so that invariant can't drift here.
-const aithne = createAithneClient({
-	origin: process.env.AITHNE_ORIGIN,
-	jwksUrl: process.env.AITHNE_JWKS_URL,
-	appOrigin: process.env.APP_ORIGIN,
-	environment: process.env.ENVIRONMENT,
-});
-
-/**
- * Override the JWT verifier. For testing only — do not call in production code.
- * Allows unit tests to exercise the middleware without a live JWKS endpoint.
- */
-export function _setVerifier(fn) {
-	aithne._setVerifier(fn);
-}
-
 /**
  * Express middleware: CSRF protection for state-mutating requests.
  *
@@ -52,7 +32,19 @@ export function csrfMiddleware(req, res, next) {
 }
 
 /**
- * Provide express middleware function for checking authentication.
+ * Build this service's auth middleware, closing over a single locally-scoped
+ * aithne client — no module-level mutable singleton, no exported runtime
+ * verifier setter. Production (index.js) calls this once at startup with
+ * real config; tests call it independently per test with a stub `_verifyFn`.
+ * This structurally rules out the footgun a mutable module-level client +
+ * exported setter had (lucas42/lucos#268): there's no shared instance a
+ * stray call could silently repoint.
+ *
+ * config is passed straight through to lucos_aithne_jsclient's
+ * createAithneClient() (ADR-0001) — this module owns only presentation.
+ * jwksUrl overrides only the JWKS fetch address (e.g. Docker bridge IP in
+ * dev); the library derives the issuer check and loginUrl() from origin
+ * regardless, so that invariant can't drift here.
  *
  * Maps lucos_aithne_jsclient's Classification.outcome onto this app's
  * branches (ADR-0002 §4):
@@ -67,29 +59,35 @@ export function csrfMiddleware(req, res, next) {
  *                     Abandon decision), so this collapses into the same
  *                     branch as unauthenticated, same as before adoption.
  */
-export async function middleware(req, res, next) {
-	const classification = await aithne.verifySession(req.headers.cookie, { requiredScope: REQUIRED_SCOPE });
+export function createAuthMiddleware(config) {
+	const aithne = createAithneClient(config);
 
-	if (classification.outcome === 'authorized') {
-		res.auth_agent = classification.payload;
-		return next();
-	}
-	if (classification.outcome === 'forbidden') {
-		console.warn('JWT missing required %s scope:', REQUIRED_SCOPE, classification.payload.sub);
-		return res.status(403).render('403', { requiredScope: REQUIRED_SCOPE });
-	}
-	// Only log a genuine JWT validation failure at ERROR — a JWKS infra
-	// failure (outcome 'unavailable') is already logged at WARN by the
-	// library itself (createAithneClient's default console logger), so
-	// logging it again here at ERROR would both duplicate it and mislabel
-	// an aithne outage as a bad-token event.
-	if (classification.outcome === 'unauthenticated' && classification.error) {
-		console.error('JWT verification failed:', classification.error.message);
+	async function middleware(req, res, next) {
+		const classification = await aithne.verifySession(req.headers.cookie, { requiredScope: REQUIRED_SCOPE });
+
+		if (classification.outcome === 'authorized') {
+			res.auth_agent = classification.payload;
+			return next();
+		}
+		if (classification.outcome === 'forbidden') {
+			console.warn('JWT missing required %s scope:', REQUIRED_SCOPE, classification.payload.sub);
+			return res.status(403).render('403', { requiredScope: REQUIRED_SCOPE });
+		}
+		// Only log a genuine JWT validation failure at ERROR — a JWKS infra
+		// failure (outcome 'unavailable') is already logged at WARN by the
+		// library itself (createAithneClient's default console logger), so
+		// logging it again here at ERROR would both duplicate it and mislabel
+		// an aithne outage as a bad-token event.
+		if (classification.outcome === 'unauthenticated' && classification.error) {
+			console.error('JWT verification failed:', classification.error.message);
+		}
+
+		// unauthenticated or unavailable — redirect to aithne login.
+		// req.protocol is populated from X-Forwarded-Proto by Express when trust proxy
+		// is set (configured in index.js), so this correctly returns 'https' in production.
+		const returnUrl = `${req.protocol}://${req.headers.host}${req.originalUrl}`;
+		return res.redirect(302, aithne.loginUrl(returnUrl));
 	}
 
-	// unauthenticated or unavailable — redirect to aithne login.
-	// req.protocol is populated from X-Forwarded-Proto by Express when trust proxy
-	// is set (configured in index.js), so this correctly returns 'https' in production.
-	const returnUrl = `${req.protocol}://${req.headers.host}${req.originalUrl}`;
-	return res.redirect(302, aithne.loginUrl(returnUrl));
+	return { middleware };
 }

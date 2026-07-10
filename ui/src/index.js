@@ -1,6 +1,6 @@
 import express from 'express';
 import fs from 'fs';
-import { middleware as authMiddleware, csrfMiddleware } from './auth.js';
+import { createAuthMiddleware, csrfMiddleware } from './auth.js';
 import { execFile as execFileCb } from 'child_process';
 import { promisify } from 'util';
 const execFile = promisify(execFileCb);
@@ -8,7 +8,15 @@ const readFile = promisify(fs.readFile);
 const unlink = promisify(fs.unlink);
 
 const app = express();
-app.auth = authMiddleware;
+// Composition root: the one place a real aithne client is constructed for
+// this process (lucas42/lucos#268).
+const auth = createAuthMiddleware({
+	origin: process.env.AITHNE_ORIGIN,
+	jwksUrl: process.env.AITHNE_JWKS_URL,
+	appOrigin: process.env.APP_ORIGIN,
+	environment: process.env.ENVIRONMENT,
+});
+app.auth = auth.middleware;
 const port = process.env.PORT || 3000;
 
 // Trust one upstream proxy (the lucos reverse proxy) so req.protocol reflects

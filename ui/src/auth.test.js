@@ -1,9 +1,8 @@
 import { test, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-	middleware,
+	createAuthMiddleware,
 	csrfMiddleware,
-	_setVerifier,
 } from './auth.js';
 
 // Verification, serve-stale JWKS, isJWKSInfraError, parseCookies, hasScope
@@ -36,9 +35,25 @@ function makeRes() {
 	return res;
 }
 
+// Sentinel verifier — throws if called unexpectedly (prevents tests
+// accidentally hitting the real JWKS endpoint). Used as makeAuth()'s default
+// so a test only needs to supply a _verifyFn when it actually expects one to
+// be called.
+const sentinelVerifier = () => {
+	throw Object.assign(new Error('Test: real verifier should not be called'), { code: 'TEST_SENTINEL' });
+};
+
+// Each call builds an independent client (construction-time-only _verifyFn
+// injection, lucas42/lucos_aithne_jsclient#7/lucas42/lucos#268) — there's no
+// shared module-level instance to reset between tests.
+function makeAuth(_verifyFn = sentinelVerifier) {
+	return createAuthMiddleware({ origin: 'https://aithne.l42.eu', _verifyFn });
+}
+
 // ─── middleware: redirect path (no JWT verification involved) ─────────────────
 
 test('middleware: no cookie → redirects to aithne login', async () => {
+	const { middleware } = makeAuth();
 	const req = makeReq();
 	const res = makeRes();
 	const next = mock.fn();
@@ -51,6 +66,7 @@ test('middleware: no cookie → redirects to aithne login', async () => {
 });
 
 test('middleware: cookie header present but no aithne_session → redirects', async () => {
+	const { middleware } = makeAuth();
 	const req = makeReq({ cookie: 'some_other_cookie=value' });
 	const res = makeRes();
 	const next = mock.fn();
@@ -60,6 +76,7 @@ test('middleware: cookie header present but no aithne_session → redirects', as
 });
 
 test('middleware: redirect encodes req.protocol into return URL (not hardcoded http)', async () => {
+	const { middleware } = makeAuth();
 	const req = makeReq({ protocol: 'https', originalUrl: '/system/lucos_photos/development' });
 	const res = makeRes();
 	await middleware(req, res, mock.fn());
@@ -69,11 +86,11 @@ test('middleware: redirect encodes req.protocol into return URL (not hardcoded h
 	assert.ok(returnUrl.includes('/system/lucos_photos/development'), 'return URL must preserve originalUrl');
 });
 
-// ─── middleware: JWT paths (via _setVerifier seam) ────────────────────────────
+// ─── middleware: JWT paths (via construction-time _verifyFn) ──────────────────
 
 test('middleware: valid JWT with creds:admin → calls next() and sets res.auth_agent', async () => {
 	const fakePayload = { sub: 'human:1', principal_class: 'human', scopes: ['creds:admin'], exp: 9999999999 };
-	_setVerifier(async () => ({ payload: fakePayload }));
+	const { middleware } = makeAuth(async () => ({ payload: fakePayload }));
 	const req = makeReq({ cookie: 'aithne_session=valid.jwt.token' });
 	const res = makeRes();
 	const next = mock.fn();
@@ -87,7 +104,7 @@ test('middleware: valid JWT missing creds:admin → 403 (not redirect — avoids
 	// A scopeless token must not redirect — re-authenticating yields the same
 	// scopeless token, causing an infinite redirect loop.
 	const fakePayload = { sub: 'human:2', principal_class: 'human', scopes: ['eolas:read'], exp: 9999999999 };
-	_setVerifier(async () => ({ payload: fakePayload }));
+	const { middleware } = makeAuth(async () => ({ payload: fakePayload }));
 	const req = makeReq({ cookie: 'aithne_session=valid.jwt.no-scope' });
 	const res = makeRes();
 	const next = mock.fn();
@@ -102,7 +119,7 @@ test('middleware: valid JWT missing creds:admin → 403 (not redirect — avoids
 
 test('middleware: valid JWT with empty scopes → 403 (not redirect)', async () => {
 	const fakePayload = { sub: 'human:3', scopes: [], exp: 9999999999 };
-	_setVerifier(async () => ({ payload: fakePayload }));
+	const { middleware } = makeAuth(async () => ({ payload: fakePayload }));
 	const req = makeReq({ cookie: 'aithne_session=valid.jwt.empty-scopes' });
 	const res = makeRes();
 	const next = mock.fn();
@@ -118,7 +135,7 @@ test('middleware: valid JWT with unrecognised principal_class and creds:admin �
 	// — authorisation is enforced purely by scope. An unrecognised principal_class
 	// must not cause rejection as long as the required scope is present.
 	const fakePayload = { sub: 'service:1', principal_class: 'service', scopes: ['creds:admin'], exp: 9999999999 };
-	_setVerifier(async () => ({ payload: fakePayload }));
+	const { middleware } = makeAuth(async () => ({ payload: fakePayload }));
 	const req = makeReq({ cookie: 'aithne_session=valid.jwt.unknown-class' });
 	const res = makeRes();
 	const next = mock.fn();
@@ -129,7 +146,7 @@ test('middleware: valid JWT with unrecognised principal_class and creds:admin �
 });
 
 test('middleware: expired JWT → redirects to aithne login (fail-closed)', async () => {
-	_setVerifier(async () => { throw Object.assign(new Error('JWTExpired'), { code: 'ERR_JWT_EXPIRED' }); });
+	const { middleware } = makeAuth(async () => { throw Object.assign(new Error('JWTExpired'), { code: 'ERR_JWT_EXPIRED' }); });
 	const req = makeReq({ cookie: 'aithne_session=expired.jwt.token' });
 	const res = makeRes();
 	const next = mock.fn();
@@ -139,7 +156,7 @@ test('middleware: expired JWT → redirects to aithne login (fail-closed)', asyn
 });
 
 test('middleware: tampered JWT signature → redirects to aithne login (fail-closed)', async () => {
-	_setVerifier(async () => { throw Object.assign(new Error('JWSSignatureVerificationFailed'), { code: 'ERR_JWS_SIGNATURE_VERIFICATION_FAILED' }); });
+	const { middleware } = makeAuth(async () => { throw Object.assign(new Error('JWSSignatureVerificationFailed'), { code: 'ERR_JWS_SIGNATURE_VERIFICATION_FAILED' }); });
 	const req = makeReq({ cookie: 'aithne_session=tampered.jwt.token' });
 	const res = makeRes();
 	const next = mock.fn();
@@ -153,7 +170,7 @@ test('middleware: JWKS infra failure with no last-known-good key set → still r
 	// (a local "sign-in unavailable" page) was abandoned (lucas42/lucos#260), so
 	// this app collapses 'unavailable' into the same redirect branch as
 	// 'unauthenticated' — unchanged end-user behaviour from before adoption.
-	_setVerifier(async () => { throw Object.assign(new Error('fetch failed'), { code: 'ERR_JWKS_TIMEOUT' }); });
+	const { middleware } = makeAuth(async () => { throw Object.assign(new Error('fetch failed'), { code: 'ERR_JWKS_TIMEOUT' }); });
 	const req = makeReq({ cookie: 'aithne_session=some.jwt.token' });
 	const res = makeRes();
 	const next = mock.fn();
