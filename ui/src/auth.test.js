@@ -157,10 +157,18 @@ test('middleware: JWKS infra failure with no last-known-good key set → still r
 	const req = makeReq({ cookie: 'aithne_session=some.jwt.token' });
 	const res = makeRes();
 	const next = mock.fn();
-	await middleware(req, res, next);
-	assert.equal(next.mock.calls.length, 0);
-	assert.equal(res.status.mock.calls.length, 0, 'must not render a local unavailable page');
-	assert.equal(res.redirect.mock.calls.length, 1, 'must redirect to login');
+	const consoleErrorSpy = mock.method(console, 'error', () => {});
+	try {
+		await middleware(req, res, next);
+		assert.equal(next.mock.calls.length, 0);
+		assert.equal(res.status.mock.calls.length, 0, 'must not render a local unavailable page');
+		assert.equal(res.redirect.mock.calls.length, 1, 'must redirect to login');
+		// An aithne-unreachable infra failure must not be logged at ERROR as if it
+		// were a bad token — the library already logs it once at WARN internally.
+		assert.equal(consoleErrorSpy.mock.calls.length, 0, 'must not log console.error for a JWKS infra failure');
+	} finally {
+		consoleErrorSpy.mock.restore();
+	}
 });
 
 // ─── csrfMiddleware ───────────────────────────────────────────────────────────

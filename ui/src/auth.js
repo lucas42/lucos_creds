@@ -77,7 +77,12 @@ export async function middleware(req, res, next) {
 		console.warn('JWT missing required %s scope:', REQUIRED_SCOPE, classification.payload.sub);
 		return res.status(403).render('403', { requiredScope: REQUIRED_SCOPE });
 	}
-	if (classification.error) {
+	// Only log a genuine JWT validation failure at ERROR — a JWKS infra
+	// failure (outcome 'unavailable') is already logged at WARN by the
+	// library itself (createAithneClient's default console logger), so
+	// logging it again here at ERROR would both duplicate it and mislabel
+	// an aithne outage as a bad-token event.
+	if (classification.outcome === 'unauthenticated' && classification.error) {
 		console.error('JWT verification failed:', classification.error.message);
 	}
 
