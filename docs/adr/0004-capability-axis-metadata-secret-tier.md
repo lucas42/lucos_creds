@@ -116,7 +116,7 @@ Proposed target grants (exact per-key scope sets to be confirmed against each ke
 |---|---|---|
 | `lucas` | `creds:admin@*` | Human admin; full access. |
 | `lucos_creds_ui` | `creds:admin@*` | Console needs full access; matches the UI's own human check (§6). |
-| `docker-deploy` | `creds:secret:read@*` *(confirm)* | Reads `.env` to deploy every system; likely read-only. |
+| `docker-deploy` | `creds:secret:read@production,publish,deploy` | Read-only `.env` fetches only, in exactly three environments — `<project>/production` (the deploy target), `lucos_deploy_orb/publish`, and `lucos_deploy_orb/deploy` (infra/monitoring creds). Confirmed against `lucos_deploy_orb`'s `fetch-production-creds` / `fetch-publish-creds` / `deploy` commands (all `scp` reads; no writes, no metadata-only access, no other environments). |
 | `lucos_creds_configy_sync` | `creds:metadata:read@development,production; creds:secret:read@development,production; creds:write@development,production` | Reads (bare + 2-part `ls` → metadata; 3-part `ls` → secret) and writes/deletes derived `PORT`/`APP_ORIGIN`. Needs **all three** scopes — confirmed against `configy_sync/sync.py` in review (an earlier draft wrongly gave it write-only); its remit is dev+prod. |
 | `lucos-agent-coding-sandbox` | `creds:metadata:read@*; creds:secret:read@development,test; creds:write@development,test` | The #384 posture: metadata everywhere (non-secret), secrets/writes confined to dev+test. |
 
