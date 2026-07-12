@@ -1,12 +1,12 @@
-# ADR-0004: Capability axis for lucos_creds access control (metadata vs. secret tier)
+# ADR-0004: Scope-based access control for lucos_creds (deny-by-default, environment-scoped grants, metadata-vs-secret tier)
 
 **Date:** 2026-07-12
 **Status:** Proposed
-**Discussion:** [lucas42/lucos_creds#384](https://github.com/lucas42/lucos_creds/issues/384). Design developed with **lucos-security** input (folded into the Decision and Consequences below).
+**Discussion:** [lucas42/lucos_creds#384](https://github.com/lucas42/lucos_creds/issues/384). Design refined through review with **lucos-security** and **lucas42** (their decisions are folded into the Decision section below, not left as open questions).
 
 ## Context
 
-`lucos_creds` access control has a **single granularity axis today: environment**. An SSH key carries an optional `restrict-environment=` option in `authorized_keys` (`server/src/keys.go` parses it into an `allowed-environment` permission extension), and every operation is gated by `isEnvironmentAllowed` (`server/src/server.go`). ADR-0002 extended that option from a single value to a comma-separated **set** (`restrict-environment="development,test"`); the enforcement is set-membership.
+`lucos_creds` access control has a **single granularity axis today: environment**. An SSH key carries an optional `restrict-environment=` option in `authorized_keys` (`server/src/keys.go` parses it into an `allowed-environment` permission extension), and every operation is gated by `isEnvironmentAllowed` (`server/src/server.go`). ADR-0002 extended that option from a single value to a comma-separated **set** (`restrict-environment="development,test"`); the enforcement is set-membership. Its default is **allow**: a key with no `restrict-environment` reaches every environment.
 
 Within an environment it can reach, a key can do **everything**: list, read decrypted secret values, write and delete credentials, and create/delete linked credentials. There is **no axis distinguishing *kinds* of access** — in particular, no way to grant "see what exists" without also granting "read the secret values".
 
@@ -19,8 +19,8 @@ The concrete downstream consumer is [lucas42/lucos_repos#426](https://github.com
 ### Four facts about the current implementation that frame this decision
 
 1. **The credential *data* store is reached only over SSH — but there are two access planes in front of it, and the UI already exists.** The Go server (`server/src/main.go`) starts exactly one listener (`startSftpServer`); it has no HTTP surface, and every credential read/write flows through its SSH exec commands or SFTP subsystem. However, there is **also** a `lucos_creds_ui` service — a full Express web console (`ui/src/index.js`, its own compose service and image) that lets a human **view (including decrypted values, with a copy-to-clipboard button), create, update and delete** simple and linked credentials. Crucially, **the UI reaches the data store the same way every other client does — over its own SSH key** (`UI_PRIVATE_SSH_KEY`, `ui/ssh-config`). So there are two distinct planes:
-   - **The SSH-key plane** (this ADR): every SSH client of the Go server — agent keys, `configy_sync`, CI, *and* the UI's `UI_PRIVATE_SSH_KEY` — is gated by its key's `authorized_keys` options. The capability axis governs this plane, and therefore bounds the UI's *data access* too.
-   - **The human→UI plane:** the Express console itself is gated by a single flat aithne scope, `creds:admin` (`ui/src/auth.js`, `REQUIRED_SCOPE`), which today grants full view-values + write across *all* environments. This is the `scopes.yaml` `creds:admin` entry ("the privileged console") — it exists **now**, not in the future, and it is a *different plane* from the SSH-key capability this ADR governs (see §4 and "Explicitly not decided here").
+   - **The SSH-key plane** (the primary subject of this ADR): every SSH client of the Go server — agent keys, `configy_sync`, CI, *and* the UI's `UI_PRIVATE_SSH_KEY` — is gated by its key's `authorized_keys` grants.
+   - **The human→UI plane:** the Express console is gated by a single aithne scope, `creds:admin` (`ui/src/auth.js`, `REQUIRED_SCOPE`), which today grants full view-values + write across *all* environments. `creds:admin` already exists in `scopes.yaml`. §6 keeps this single check but makes the two planes *consistent* rather than treating them as unrelated.
 
 2. **A metadata/secret boundary already exists *latently* in the command surface.** The exec handler in `server.go` already blanks credential values on the list paths:
    - `ls` (no args) → `getAllSystemEnvironments()` — the system+environment list. No secret material.
@@ -30,25 +30,30 @@ The concrete downstream consumer is [lucas42/lucos_repos#426](https://github.com
    - `ls <system>/<env>/<key>` (3 parts) → a single credential *including its value*.
    - the SFTP read of `<system>/<env>/.env` (`controller.go` → `getAllCredentialsBySystemEnvironment`) → the full `.env` with values. **This is the primary consumption path**: every system fetches its own `.env` this way at deploy time.
 
-   So the metadata tier is not a risky new data projection — it is mostly a matter of **gating existing commands** by capability (with one graph-projection wrinkle noted in Decision §2).
+   So the metadata tier is not a risky new data projection — it is mostly a matter of **gating existing commands** by the scope the operation requires (with one graph-projection wrinkle noted in Decision §2).
 
-3. **Access is carried per-key via `authorized_keys` options, not a principal store.** Keys and their permissions are parsed from a flat `authorized_keys` file (`parseAuthorizedKeys`). There is no database of principals or roles. Adding a capability axis therefore does not need a new store — it needs a second option, parsed the same way `restrict-environment` is.
+3. **Access is carried per-key via `authorized_keys` options, not a principal store.** Keys and their permissions are parsed from a flat `authorized_keys` file (`parseAuthorizedKeys`), committed at `server/src/authorized_keys` and baked into the image at build. There is no database of principals or roles — the file *is* the policy, changed by a reviewed PR. There are currently **five keys**: `lucas`, `docker-deploy`, `lucos_creds_ui`, `lucos_creds_configy_sync` (all four unrestricted), and `lucos-agent-coding-sandbox` (`restrict-environment="development,test"`). This small, fully-enumerable set is what makes a deny-by-default migration tractable (Decision §5).
 
-4. **The linked-credential *scope* is a different plane from a key's *capability*.** The `scope` on a linked credential (validated against the embedded `lucos_auth_scopes` vocabulary via `knownScopes`) governs what a *client system* may do at some *other server system* (e.g. `media-metadata:read`). A key's **capability** governs what that key may do **to `lucos_creds` itself**. These do not compose through the same enforcement path, and conflating them would be a category error (see §4).
+4. **Access verbs are `lucos_auth_scopes` scopes — the same vocabulary the rest of the estate uses.** The `scope` on a *linked credential* (validated against the embedded vocabulary via `knownScopes`) governs what a client system may do at some *other* server system (e.g. `media-metadata:read`). The access verbs this ADR introduces for `lucos_creds` *itself* are **the same kind of thing** — scopes from `scopes.yaml`. What differs between the planes is **only the proof mechanism** by which a principal establishes it holds a scope: an SSH key proves it via its `authorized_keys` grant; a human proves it via a signed aithne JWT; a linked credential's stored scope is a third, pre-existing use of the same vocabulary. Same tokens, same meaning, different proof paths — *not* different "types" of thing. (They remain **disjoint code paths**: the `authorized_keys` grant check and the `knownScopes` link-validation never share state — a distinction that matters for implementation, not for the conceptual model.)
 
 ## Decision
 
-Introduce a second, orthogonal access-control axis: **capability**. Access to `lucos_creds` is governed by *environment* × *capability*, both carried as `authorized_keys` options and both enforced server-side at command dispatch.
+Replace the single environment axis with a unified, **deny-by-default, scope-based grant model**. A key's authority is a list of **`scope@environment` grants** in `authorized_keys`; an operation is permitted only if the key holds a grant whose scope satisfies the operation *and* whose environment set covers the target environment. Nothing is permitted by absence.
 
-### 1. Three capabilities, matching the natural command boundary
+### 1. The access scopes (and what `creds:admin` encompasses)
 
-| Capability | Grants | Enforced at |
+| Scope | Permits | Enforced at |
 |---|---|---|
 | `creds:metadata:read` | `ls`, `ls <system>/<env>` (values already stripped) | the two list paths in the exec handler |
 | `creds:secret:read` | `ls <system>/<env>/<key>` (single value) and the SFTP `.env` read | the 3-part exec path; SFTP `OPEN`/read in `server.go`/`controller.go` |
 | `creds:write` | `<system>/<env>/<key>=<value>`, the `=` delete, `<client>/<env> => <server>/<env>\|<scope>`, and `rm <client>/<env> => <server>` | `updateCredential`, `deleteCredential`, `updateLinkedCredential`, `deleteLinkedCredential` dispatch |
+| `creds:admin` | **All of the above** — satisfies every operation's scope requirement | recognised at every dispatch branch as satisfying the required scope |
 
-The capabilities are a **flat, explicit set** with **no implicit hierarchy** — mirroring the flat `scopes.yaml` model. A key holds exactly the capabilities it lists; `creds:write` does **not** imply `creds:secret:read`, and `creds:secret:read` does **not** imply `creds:metadata:read`. A key that needs several lists them all (e.g. a dev-write agent key: `creds:metadata:read,creds:secret:read,creds:write` composed with `restrict-environment="development"`). This keeps each key's authority a plain, auditable enumeration rather than something to be derived through implication rules.
+The three granular scopes are **independent, with no implicit hierarchy among them**: `creds:write` does *not* imply `creds:secret:read`, and `creds:secret:read` does *not* imply `creds:metadata:read`. A key that needs several holds several.
+
+**`creds:admin` is a single, deliberately-named full-access scope, and it encompasses exactly `creds:metadata:read` + `creds:secret:read` + `creds:write`.** It exists so a full-access principal (the admin console, a human admin) can be expressed and checked as **one** token rather than an enumeration — which is what lets the human→UI plane use a single check that matches the UI key's grant (§6).
+
+**`creds:admin` is a fixed named grant, not a capability wildcard.** The distinction is load-bearing: a wildcard (`creds:*`) would mean "everything, *including scopes that don't exist yet*" — auto-inheriting. `creds:admin` encompasses **exactly the three scopes named above and no others**; if a new access scope is ever added to `lucos_creds`, whether `creds:admin` should encompass it is a **deliberate decision** (an edit to that set and to this table), never automatic. So the "who actually needs this?" question fires on every new scope. For that same reason **there is no capability wildcard** in the grant syntax (§3): the scope set is small, finite, and security-sensitive, so every grant names a real scope.
 
 ### 2. The metadata/secret boundary, precisely
 
@@ -63,72 +68,101 @@ The capabilities are a **flat, explicit set** with **no implicit hierarchy** —
 
 Note the *client-side* view already behaves correctly: `ls <clientsystem>/<env>` surfaces each `KEY_<SERVER>` with `Scope` as a **separate field** (not packed into `Value`), so blanking `Value` leaves the scope graph fully readable. The graph is therefore already enumerable per-client today; the projection change above is what makes the **server-side** view equally clean, so a consumer like #426 can read a server's inbound trust edges directly.
 
-The safety of the whole tier rests on this line being **enforced server-side in the Go server** (the value is never marshalled for a metadata-only key), not in a client. In particular it is enforced *below* the UI: because the UI reaches data only through `UI_PRIVATE_SSH_KEY` (fact 1), a metadata-only capability on that key would bound the UI to metadata regardless of what the console's page templates try to render.
+The safety of the whole tier rests on this line being **enforced server-side in the Go server** (the value is never marshalled for a request that lacks `creds:secret:read`), not in any client. This holds for the UI too: the console has no bypass, because it reaches data only through its own SSH key, and the server applies the same dispatch checks to that key as to any other.
 
-### 3. Capabilities attach as a second `authorized_keys` option
+### 3. Grants attach via a single `allow-scopes` option
 
-A new option — proposed spelling `restrict-capability="creds:metadata:read"` (comma-separated for a set) — is parsed in `parseAuthorizedKeys` into an `allowed-capability` permission extension, exactly as `restrict-environment` becomes `allowed-environment`. A new `isCapabilityAllowed(allowedCapability, required)` helper (twin of `isEnvironmentAllowed`) gates each dispatch branch. The two axes are checked independently and both must pass — *environment* × *capability*.
+A key's authority is expressed by one `authorized_keys` option, **`allow-scopes`**, whose value is a list of scope-primary, environment-scoped grants:
 
-The option **spelling** (`restrict-capability` vs. `creds-scope` vs. `restrict-scope`) and whether the value carries the full `creds:` prefix or a bare suffix are ergonomic details for review; this ADR fixes the *mechanism* (a second authorized_keys option, parsed and enforced like the first), not the bikeshed. The recommendation is to carry the **full scope string** (`creds:metadata:read`) as the option value, so the identical token appears in `scopes.yaml`, in the key option, and — if creds later authenticates principals via aithne — in a future JWT `scopes` claim, with no rename.
+```
+allow-scopes="creds:metadata:read@*; creds:secret:read@development; creds:write@development"  ssh-ed25519 … lucos-agent-coding-sandbox
+```
 
-**No schema change.** This is a key-option + dispatch-enforcement change only. The `credential` and `linked_credential` tables are untouched.
+Read as: *"metadata:read in all environments; secret:read in development; write in development."* That is the agent posture #384 wanted — and note it **cannot** be expressed by a separate environment set × scope set, because it binds *different* scopes to *different* environments; that is exactly why grants are per-scope rather than two independent axes.
 
-### 4. Vocabulary membership — recommendation, deferred to security + lucas42
+Syntax:
+- **Grants** are separated by `;`; a grant is `<scope>@<environment-set>`; the **environment set** is comma-separated.
+- **`@*` is the environment wildcard** — "all environments, present and future" — for keys that legitimately need it (e.g. deploy/sync/UI keys). There is **no scope wildcard** (§1).
+- The option name is **`allow-`, not `restrict-`**, deliberately: under deny-by-default the field *grants* from nothing, it does not *narrow* from everything, and the name should say so.
+- `allow-scopes` **supersedes `restrict-environment`** entirely — environment now lives inside each grant, so the separate environment option is removed in the same change (§5). Because there is a **single** option carrying the whole policy, the `permissions.Extensions` map holds one key and the "last-option-silently-clobbers-the-other" merge footgun a two-option design would have had **does not arise**.
 
-The capability tokens **should be named in the shared `scopes.yaml` vocabulary** — `creds:metadata:read`, `creds:secret:read`, `creds:write` — for three reasons:
-- **Consistency / single catalogue.** `scopes.yaml` already carries `creds:admin`; one estate-wide catalogue of access verbs is easier to reason about than a creds-private list.
-- **Dogfooding, honestly scoped.** The service that publishes (and per [lucas42/lucos_creds#375](https://github.com/lucas42/lucos_creds/issues/375), now closed, validates) the vocabulary *names its own* access verbs in it.
-- **Forward-compatibility.** If creds ever moves from SSH keys to aithne-issued identities, the same tokens carry straight into a JWT `scopes` claim.
+Enforcement: each dispatch branch names the scope it requires (per §1). A key is permitted iff it holds a grant `(s, envset)` where `s` satisfies the required scope (`s` equals it, or `s` is `creds:admin`) **and** the operation's environment is in `envset` (or `envset` contains `*`). Parsing happens in `parseAuthorizedKeys`; a helper resolves "does this key satisfy `<scope>` in `<environment>`?" at each branch.
 
-**But** — and this is the important boundary — they are **enforced via the key-option plane (§3), not the linked-credential `knownScopes` validation path.** A key's capability is a property of an SSH key in `authorized_keys`; it is never stored in the DB, never presented to a server, never validated by `knownScopes` (which validates *scope strings creds stores on links to other systems*). Naming them in the vocabulary is **documentary and forward-looking**, not a coupling of the two enforcement paths. Forcing creds capabilities through `knownScopes` would conflate the two planes (fact 4) and is explicitly **not** proposed.
+**Two implementation constraints** (from lucos-security's review — carried into the implementation issue as explicit test requirements):
+- Because `;` / `,` / `@` are now structural, **environment (and system) names must be character-class-validated** to exclude them — creds currently has no such validation, and an unvalidated `@`/`;`/`,` in a name would make the grant list ambiguous.
+- **Grant scopes must be validated against the vocabulary at parse/startup**, and an unknown scope must fail loudly (refuse to start / reject the key), never silently grant or deny.
 
-Because vocabulary membership is a shared-contract decision (it touches `lucos_auth_scopes`), the final call is **lucas-security's and lucas42's**. The alternative — keeping the capability tokens creds-internal (never in `scopes.yaml`) — is viable and slightly reduces the build-time coupling surface; the recommendation above is that the consistency and forward-compatibility win outweighs it. This is recorded as an explicit open decision, not silently resolved.
+**No schema change.** This is a key-parsing + dispatch-enforcement change only. The `credential` and `linked_credential` tables are untouched.
 
-**Precedent note (three-segment scope shape).** Every entry in `scopes.yaml` today is a flat `domain:verb` (e.g. `media-metadata:read`, `creds:admin`). `creds:metadata:read` / `creds:secret:read` would be the **first two-colon (`domain:sub:verb`) scopes** in the vocabulary. This is a deliberate, documented choice, not an accident: security verified across all `lucas42/lucos_*` repos that no consumer positionally parses scope strings (`split(":")` + index) — every path (aithne's `requireAnyScope`, `lucos_aithne_jsclient`'s `hasScope`, downstream `scopes.includes(...)`) treats scopes as opaque exact-match strings. So the extra segment is safe; it is called out here so the next person adding a scope knows the shape was intentional. (Aside: `creds:admin` is today reused for two meanings — the deployed UI console *and* the "future console" the `scopes.yaml` comment describes — a small pre-existing wrinkle, noted so it isn't mistaken for something this ADR introduces.)
+### 4. The access scopes are shared-vocabulary scopes, added to `scopes.yaml`
 
-### 5. Default preserves backward-compatibility; narrowing is explicit
+`creds:metadata:read`, `creds:secret:read` and `creds:write` are **added to the shared `lucos_auth_scopes` vocabulary** (`scopes.yaml`), alongside the existing `creds:admin`. They are ordinary scopes — the same kind of token the rest of the estate uses — and the only per-plane difference is the proof mechanism (fact 4). Reasons this is the right call, now settled rather than deferred:
+- **One catalogue.** A single estate-wide list of access verbs; `scopes.yaml` already carries `creds:admin`.
+- **Dogfooding.** The service that publishes (and per [lucas42/lucos_creds#375](https://github.com/lucas42/lucos_creds/issues/375) validates) the vocabulary names its own access verbs in it.
+- **Forward-compatibility.** If creds ever authenticates principals via aithne-issued JWTs instead of SSH keys, the identical tokens carry straight into a `scopes` claim — no rename.
+- **Enforcement depends on it.** §3's parse-time validation checks grants against the vocabulary, so the tokens must be in it.
 
-**Absence of `restrict-capability` means all capabilities** — exactly as absence of `restrict-environment` means all environments. This is deliberate and load-bearing: every system fetches its own `.env` via SFTP secret-read (fact 2), so a true "default-deny on the capability axis" would break every existing key's `.env` fetch on deploy. Existing keys therefore keep full capability and are **neither silently widened nor silently narrowed**.
+**Precedent note (three-segment scope shape).** Every entry in `scopes.yaml` today is a flat `domain:verb` (e.g. `media-metadata:read`, `creds:admin`). `creds:metadata:read` / `creds:secret:read` are the **first two-colon (`domain:sub:verb`) scopes** in the vocabulary. This is deliberate, not an accident: security verified across all `lucas42/lucos_*` repos that no consumer positionally parses scope strings (`split(":")` + index) — every path (aithne's `requireAnyScope`, `lucos_aithne_jsclient`'s `hasScope`, downstream `scopes.includes(...)`) treats scopes as opaque exact-match strings. So the extra segment is safe; it is recorded here so the next person adding a scope knows the shape was intentional.
 
-Narrowing is always **explicit**:
-- **Agent keys** narrow to `creds:metadata:read` across all environments, plus `creds:secret:read,creds:write` where they already have `development` (i.e. the agent key becomes "metadata everywhere, secret-read + write in development only" — the posture the migration wanted).
-- **The `lucos_repos` C4 key** ([lucas42/lucos_repos#426](https://github.com/lucas42/lucos_repos/issues/426)) is minted with `creds:metadata:read` only, unblocking the trust-edge layer without any secret access.
-- **The UI key (`UI_PRIVATE_SSH_KEY`) is left unrestricted by this ADR**, because the console today displays decrypted values and offers create/update/delete across all environments — it genuinely needs full capability to do its current job. It is flagged only to be explicit: the UI is *not* exempt from the axis (it is an SSH client like any other), so if the human→UI `creds:admin` scope is later decomposed (see "Explicitly not decided here"), the UI key can be narrowed in lock-step. No change to it is proposed now.
+### 5. Deny-by-default, with a one-time migration of the five existing keys
 
-The honest trade-off of default-allow: a **new** key added to `authorized_keys` *without* the option is unrestricted on the capability axis (same footgun the environment axis already has). Mitigation is provisioning discipline — documented in the README next to `restrict-environment` — plus an `authorized_keys` lint tracked as deferred item 6. This is the same class of standing discipline ADR-0002 accepted for its bright-line rule, and it is preferred here over a default that breaks production `.env` fetches.
+**A key has access only to what its grants explicitly allow. Absence of a grant is denial.** This replaces the current allow-by-default on the environment axis (and applies from the outset to the new scope dimension). The old default — where a key with no option reaches everything — is exactly the footgun deny-by-default removes: a new key added to `authorized_keys` with no `allow-scopes` now gets **nothing** and fails *loudly and visibly* (it simply cannot do anything), instead of silently receiving full access.
+
+Because the capability dimension is new and the environment dimension flips its default, this is a coordinated change — but a small, fully-enumerable one, because there are only **five keys** (fact 3). The implementation and migration **must ship together atomically**: deny-by-default cannot be enabled before every key carries explicit grants, or every system's `.env` fetch (and every deploy) breaks the instant it lands. The sequence is the estate's standard flag-day discipline: annotate all five keys with explicit `allow-scopes` → verify each still performs exactly the operations it did before → land the enforcement + annotated file in one deploy → verify again.
+
+Proposed target grants (exact per-key scope sets to be confirmed against each key's real usage as part of the implementation issue — deploy/sync operations in particular should be traced, not assumed):
+
+| Key | Proposed `allow-scopes` | Rationale |
+|---|---|---|
+| `lucas` | `creds:admin@*` | Human admin; full access. |
+| `lucos_creds_ui` | `creds:admin@*` | Console needs full access; matches the UI's own human check (§6). |
+| `docker-deploy` | `creds:secret:read@*` *(confirm)* | Reads `.env` to deploy every system; likely read-only. |
+| `lucos_creds_configy_sync` | `creds:write@*` *(confirm; possibly + `creds:metadata:read@*`)* | Writes derived `PORT`/`APP_ORIGIN` across environments. |
+| `lucos-agent-coding-sandbox` | `creds:metadata:read@*; creds:secret:read@development,test; creds:write@development,test` | The #384 posture: metadata everywhere (non-secret), secrets/writes confined to dev+test. |
+
+The `lucos_repos` C4 key is *added* (not pre-existing) with `creds:metadata:read@*` — or `@production` if that suffices — unblocking [lucas42/lucos_repos#426](https://github.com/lucas42/lucos_repos/issues/426) with no secret access.
+
+A useful property falls out of deny-by-default: a *newly-created environment* is automatically denied to every key that doesn't hold `@*`, until explicitly granted — strictly safer than today, where a new environment would be immediately readable by the four unrestricted keys.
+
+### 6. The human→UI plane: one check, matching the UI key's grant
+
+The `lucos_creds_ui` console keeps its **single existing `creds:admin` check, unchanged** — there is deliberately no per-operation scope logic in the UI, because no principal today needs UI access *with* fine-grained scopes; that would be complexity for a case that doesn't exist. Consistency between the UI and the SSH layer is achieved instead by:
+
+- granting the UI's `UI_PRIVATE_SSH_KEY` exactly `allow-scopes="creds:admin@*"` (§5), and
+- the server recognising `creds:admin` as full access (§1).
+
+So the human check (`creds:admin` in the JWT) and the UI key's grant (`creds:admin@*`) are the **same token**: a human can do through the console exactly what the console's key is allowed to do, and the key's `creds:admin@*` is the data-layer backstop that a UI bug cannot exceed. This closes the "the UI is a coarse bypass of the new model" concern both reviewers raised — not by decomposing `creds:admin`, but by making the one check consistent across both planes. There is **no UI code change**; the only work is server-side (recognise `creds:admin`) and the UI key's grant.
+
+**One honest asymmetry.** The `@environment` qualifier is a *creds-SSH-grant* refinement; it is **not** part of the scope token and does **not** appear in aithne JWTs (which have no environment concept). So an *agent's SSH key* can be scoped to `secret:read@development`, but a *human* holding `creds:admin` via the UI operates across **all** environments (bounded only by the UI key's `@*`). This is intentional: environment-scoping is a **machine-key least-privilege tool** (it exists to keep agent keys out of production secrets); human access is gated instead by *who is granted the scope at all*. Per-environment *human* access would require environment-qualified JWT scopes — a much larger aithne change, firmly out of scope here.
 
 ## Consequences
 
 ### Positive
 
-- **The exact capability the migration and #426 need becomes mintable:** "see the shape of any environment without its secrets", enforced server-side.
-- **Orthogonal composition** (`environment × capability`) gives the posture "metadata-read across all environments, secret-read in development only" that an agent key should have — impossible under the single-axis model.
-- **Minimal footprint, no schema change:** a second parsed option, an `isCapabilityAllowed` twin, capability checks at the (already enumerable) dispatch branches, plus the one CLIENT_KEYS graph-projection fix. No new store, no new failure domain.
-- **The boundary rides on an existing structural split** (list paths already blank values), so the metadata tier is low-risk to introduce.
-- **Auditability:** each key's authority is a plain enumeration in `authorized_keys`; no implication rules to reason through.
+- **Fail-closed by default.** A misconfigured or forgotten key grants *nothing* and fails visibly, instead of silently over-granting. This is the right posture for the estate's credential store specifically.
+- **The metadata tier the migration and #426 need becomes mintable** — "see the shape of any environment without its secrets", enforced server-side.
+- **The agent posture is expressible** (`metadata:read@*; secret:read@development; write@development`) — impossible under a single axis or two independent axes.
+- **UI and SSH planes are consistent** (§6) with no UI code change and no coarse-scope bypass.
+- **One option, one policy string per key** — auditable at a glance in a committed file; and the single-option model structurally avoids the two-option merge footgun.
+- **No schema change**, and the boundary rides on an existing structural split (list paths already blank values).
 
 ### Negative (honest trade-offs)
 
-- **Default-allow on the capability axis, not default-deny.** A new key without the option is unrestricted; safety depends on provisioning discipline, not a fail-closed default. Chosen because a fail-closed default would break every system's `.env` fetch (fact 2). Mitigations: README documentation and a future lint.
-- **A second option to keep correct.** Operators now reason about two axes when scoping a key. Mitigated by mirroring `restrict-environment` exactly (same file, same syntax, same enforcement shape) so there is one pattern to learn, not two.
-- **The CLIENT_KEYS graph projection is a real code change**, not pure command-gating — the only place the metadata tier touches data marshalling rather than dispatch. It must be covered by a test asserting the key value is stripped while `client:env` and `scope` survive.
-- **Vocabulary coupling (if §4 is accepted):** adding `creds:*` capabilities to `scopes.yaml` build-time-couples creds (and aithne) to that change, per the existing vocabulary rebuild rule. Small, and no worse than the existing `creds:admin` entry.
+- **A coordinated flag-day migration.** Deny-by-default must land atomically with explicit grants on all five keys, or `.env` fetches/deploys break. Mitigated by the tiny, enumerable key set and the verify-before-and-after discipline — but it is a real change with a real (if small and controllable) blast radius, not a no-op.
+- **`creds:admin` is a named full-access grant**, a deliberate exception to the otherwise-flat scope set. Justified by the UI-consistency win (§6); bounded by being a *fixed* set, not a wildcard (§1) — but it is the one place a single token confers everything, so any future scope must be consciously included or excluded.
+- **New character-class validation required** on environment/system names (§3), because grant syntax now uses `;@,` structurally. Small, but it is new server code and a (theoretical) constraint on name choices.
+- **Vocabulary coupling.** Adding the three scopes to `scopes.yaml` build-time-couples creds (and aithne) to that change, per the existing vocabulary rebuild rule — no worse than the existing `creds:admin` entry.
+- **Human access is not environment-scoped** (§6) — an accepted asymmetry, called out so it is a known property rather than a surprise.
 
 ### Explicitly not decided here
 
-- **Decomposing the flat human→UI `creds:admin` scope.** The `lucos_creds_ui` console (fact 1) gates *human* access behind a single flat aithne scope, `creds:admin`, that grants view-values + write across all environments. This ADR deliberately does **not** re-model that scope, for two reasons: (a) it is a *different plane* — human-to-UI authorization via an aithne JWT, versus this ADR's SSH-key-to-data-store capability — and the ticket (#384) scopes this work to the SSH-key access model; (b) the axis introduced here already gives a lever on the UI's *data* reach without touching the UI, because the console reaches data only through `UI_PRIVATE_SSH_KEY` (§5). Whether `creds:admin` should later be **split** into `creds:metadata:read` / `creds:secret:read` / `creds:write` UI-level scopes so a human can be granted "browse the shape of prod" without "read prod secrets" — mirroring this axis on the human plane — is a real and worthwhile follow-up, but it is UI + aithne-scope work, separable from this decision. It is called out as a candidate follow-up (item 5) rather than resolved here. Naming the capabilities in the shared vocabulary (§4) is chosen partly so that decomposition, if taken, reuses the same tokens.
-- The **eventual aithne-issued-identity model** for creds' *machine* clients (principals authenticated by `lucos_aithne` JWTs rather than SSH keys) is a larger, separate evolution. This ADR stays within the SSH-key model. The vocabulary naming in §4 is chosen to be forward-compatible with that evolution, but does not commit to it. (The `lucos_authentication`→aithne consumer migration, [lucas42/lucos_aithne#12](https://github.com/lucas42/lucos_aithne/issues/12), is now closed; a creds-specific aithne-identity move, if pursued, would be its own ADR.)
-- The **option spelling** and prefix form (§3) are left to review.
+- The **eventual aithne-issued-identity model** for creds' *machine* clients (principals authenticated by `lucos_aithne` JWTs rather than SSH keys) is a larger, separate evolution. This ADR stays within the SSH-key model; the shared-vocabulary scopes (§4) are chosen to be forward-compatible with it but do not commit to it. (The `lucos_authentication`→aithne consumer migration, [lucas42/lucos_aithne#12](https://github.com/lucas42/lucos_aithne/issues/12), is closed; a creds-specific aithne-identity move would be its own ADR.)
+- **Per-environment human access** (environment-qualified JWT scopes) — out of scope, per §6.
 
-## Deferred work (to be tracked as GitHub issues before this ADR is complete)
+## Deferred work (tracked as GitHub issues before this ADR is complete)
 
-Per the estate convention that an ADR is not complete until its deferred work is ticketed, the following are raised as follow-up issues on agreement of this design:
+Per the estate convention that an ADR is not complete until its deferred work is ticketed, these are filed as issues on agreement of this design:
 
-1. **Implement the capability axis** (`lucos_creds`): parse `restrict-capability` in `parseAuthorizedKeys`; add `isCapabilityAllowed`; gate every exec/SFTP dispatch branch per §1; the CLIENT_KEYS metadata graph-projection per §2; README documentation of the option next to `restrict-environment`; tests locking the boundary and the default-allow semantics. Two implementation constraints security flagged, to be encoded as explicit test requirements:
-   - **Build the CLIENT_KEYS metadata projection straight from the `LinkedCredential` rows** (`ClientSystem`/`ClientEnvironment`/`Scope`) — do **not** string-parse the assembled packed `client:env=value|scope` string, and do **not** `decrypt()`/touch `PlainValue` at all for a metadata-only request. System/environment names have no character-class validation, so a future name containing `:` or `|` would make positional splitting ambiguous; and never decrypting means a bug in the capability gate cannot leak a value that was never in memory (defense-in-depth for near-zero cost).
-   - **`parseAuthorizedKeys` must *merge* `permissions.Extensions` across option matches, not replace the map.** Today it does `Extensions = map[string]string{...}` (a full replacement), which is harmless with one option but would let whichever of `restrict-environment`/`restrict-capability` is parsed *last* silently clobber the other. Because both axes **default-allow** on a missing extension key (§5), that failure mode fails **open** — a "metadata-only, dev-only" key could end up unrestricted on one axis. A test must assert both restrictions survive when both options are present on one key.
-2. **Narrow the agent key(s)** to `creds:metadata:read` everywhere + `creds:secret:read,creds:write` in `development` (§5). Depends on (1).
-3. **Mint the `lucos_repos` C4 metadata key** with `creds:metadata:read` only, unblocking [lucas42/lucos_repos#426](https://github.com/lucas42/lucos_repos/issues/426). Depends on (1).
-4. **Add `creds:metadata:read` / `creds:secret:read` / `creds:write` to `lucos_auth_scopes`** (`scopes.yaml`) — **only if** §4's vocabulary-membership recommendation is accepted by security + lucas42.
-5. **(Candidate, not committed) Decompose the flat human→UI `creds:admin` scope** in `lucos_creds_ui` into per-capability UI scopes mirroring this axis, so a human can be granted metadata-browse without secret-read. Separable UI + aithne-scope work; depends on (4) if it reuses the same tokens. Raised for tracking only if lucas42 wants to pursue it — see "Explicitly not decided here".
-6. **`authorized_keys` capability lint** (`lucos_creds`): a check that flags a key carrying no `restrict-capability` (and/or no `restrict-environment`), so the default-allow footgun (§5) surfaces at provisioning time rather than silently granting a new key full access. Small, and it converts the standing discipline into an enforced check.
+1. **Implement the grant model + migrate atomically** (`lucos_creds`): `allow-scopes` scope-primary grant parsing in `parseAuthorizedKeys`; deny-by-default enforcement at every exec/SFTP dispatch branch (§1, §3); `creds:admin` recognised as full access; `@*` environment wildcard; environment/system-name character-class validation; parse-time validation of grants against the vocabulary; the CLIENT_KEYS metadata projection built **from the `LinkedCredential` rows** (never string-parse the packed value, never `decrypt()` for a metadata-only request — §2); removal of `restrict-environment`; README documentation; and — **in the same PR** — the annotated `authorized_keys` giving all five keys explicit grants (§5), with tests locking the boundary, the deny-by-default semantics, and the agent posture. This bundles what were previously separate "agent-key narrowing" and "authorized_keys lint" items: narrowing is just the migration annotation, and deny-by-default + parse-time validation does the lint's job better (a scopeless key fails loudly rather than needing to be flagged). It must be one PR because deny-by-default and the key annotations cannot safely land apart.
+2. **Add `creds:metadata:read` / `creds:secret:read` / `creds:write` to `lucos_auth_scopes`** (`scopes.yaml`) — §4. Issue (1)'s parse-time validation depends on it, so this lands first or together.
+3. **Mint the `lucos_repos` C4 metadata-read key** with `creds:metadata:read` (§5), unblocking [lucas42/lucos_repos#426](https://github.com/lucas42/lucos_repos/issues/426). Depends on (1).
