@@ -1,7 +1,7 @@
 # ADR-0004: Scope-based access control for lucos_creds (deny-by-default, environment-scoped grants, metadata-vs-secret tier)
 
 **Date:** 2026-07-12
-**Status:** Proposed
+**Status:** Accepted
 **Discussion:** [lucas42/lucos_creds#384](https://github.com/lucas42/lucos_creds/issues/384). Design refined through review with **lucos-security** and **lucas42** (their decisions are folded into the Decision section below, not left as open questions).
 
 ## Context
