@@ -109,6 +109,17 @@ A production origin needs only `domain` and a development origin needs only `htt
 
 The cost is bounded staleness: a newly-added system is not linkable until the next hourly sync, which the error message says out loud.
 
+**The precondition fires on every write, including rotation — and that must be reckoned with before it ships.** `updateLinkedCredential` is the single entry point for creating, rotating *and* re-scoping a link (one call site in `server.go`, a `REPLACE INTO`), and ADR-0003 establishes that a scope change **is** a re-issuance. So the check does not merely block new bad links: **any pre-existing link to an origin-less system becomes unrotatable.** Key rotation is an incident-response action, so the failure would arrive at the worst possible moment.
+
+The verification that this set is empty is therefore a **prerequisite to implementation, not a reassurance after it**. And it cannot be completed by any agent: the `lucos-agent-coding-sandbox` key is restricted to `development`/`test`, so the `production` half of the store is unreadable to every agent identity (confirmed live — `production` returns a permission error, independently hit by the architect, the code reviewer and security). The development half is verified clean; the production half must be checked by a key that can read it before the rule is enabled.
+
+Two ways to discharge it, and the choice belongs to whoever implements:
+
+- **Audit first (preferred).** Enumerate production links whose server system lacks an origin, confirm the set is empty (or fix what it finds), then enable the check unconditionally. Keeps the rule simple.
+- **Grandfather.** Apply the precondition only where the client→server pair is new, exempting re-issuance of existing links. Avoids the rotation hazard without the audit, at the cost of a permanently more complicated rule and links that silently never gain an `ORIGIN_*`.
+
+The audit is preferred because the development evidence suggests the set is empty, in which case grandfathering buys complexity for nothing.
+
 ### 7. The refusal applies only to environments creds holds origin data for
 
 `sync.py` iterates `["development", "production"]`, so no other environment ever has an `INTERNAL_ORIGIN`. Applying decision 6 literally would make **every link in a test environment illegal** — and ADR-0002 names a `test`→`test` linked credential as the canonical way to hold a legitimately non-production test secret. Blocking on absence-of-data would render the deliberately-open environment namespace unusable.
@@ -148,6 +159,7 @@ lucas42/lucos_creds#470 stated that this proposal "doesn't retire the scope trap
 
 Per convention these are raised as GitHub issues before this ADR is complete; the coordinator has asked to commission implementation tickets separately once this ADR settles, so they are enumerated here rather than filed from this branch:
 
+0. **Prerequisite — audit production links for origin-less server systems** (see decision 6). Must be done with a key that can read the `production` environment; no agent identity can. Blocks enabling the decision-6 check, because the check makes any such link unrotatable.
 1. **Implement decisions 1–7** in `lucos_creds` (`sync.py` `INTERNAL_ORIGIN`; `storage.go` emit, type, prefix reservation; `updateLinkedCredential` validation step 4). **Includes decision 2a's metadata-tier projection** — the value-blanking exemption must key on the `origin` credential type, so that `ORIGIN_*` is readable at `creds:metadata:read` while `KEY_*`, emitted from the same loop, stays secret-tier.
 2. **Add `extra_hosts: host.docker.internal:host-gateway`** to client compose files adopting `ORIGIN_*` (contingent on decision 4 surviving review).
 3. **Audit linked credentials predating ADR-0003's dev→prod guard** for non-read-only dev→prod scopes.
