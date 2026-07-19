@@ -56,7 +56,17 @@ The value is **computed at read time** in `getClientCredentialsBySystemEnvironme
 
 `normaliseCredentialKey` gains a `strings.HasPrefix(normalisedKey, "ORIGIN_")` rejection alongside the existing `KEY_` one, so the form of these values is guaranteed (protocol present, no trailing slash) and cannot be hand-overridden. The prefix is free: **no existing credential in any development environment begins `ORIGIN_`** (the estate's convention is the suffix form, `AITHNE_ORIGIN`).
 
-Emitted credentials must carry a **new type, `origin`** — reusing `config` would break the hourly sync. `cleanupRemovedSystems` enumerates every credential of type `config` for a system absent from configy and calls `updateCredential(..., None)` on it; that call routes through `normaliseCredentialKey`, which would now reject the reserved `ORIGIN_` prefix and abort the sync run. `KEY_*` avoids this today only because its type is `client`. The UI hides the edit affordance for the new type exactly as it does for `config`.
+Emitted credentials must carry a **new type, `origin`** — reusing `config` would break the hourly sync. `cleanupRemovedSystems` enumerates every credential of type `config` for a system absent from configy and calls a delete on it; that routes through `deleteCredential` → `normaliseCredentialKey`, which would now reject the reserved `ORIGIN_` prefix and abort the sync run. `KEY_*` avoids this today only because its type is `client`. The UI hides the edit affordance for the new type exactly as it does for `config`.
+
+### 2a. `ORIGIN_*` sits at the **metadata** tier, not the secret tier
+
+Under ADR-0004, reading a credential's *value* requires `creds:secret:read`, while `creds:metadata:read` sees only its shape. Because `ORIGIN_<SERVERSYSTEM>` is emitted from the same function as `KEY_<SERVERSYSTEM>`, it would **inherit secret-tier treatment by default** — as an accident of wiring rather than a decision.
+
+That would be wrong. An origin is not a secret: it is derived entirely from `domain` and `http_port` in `lucos_configy`'s `config/systems.yaml`, which is public. Classifying it as a secret would protect a value anyone can already read, while denying it to exactly the consumer the metadata tier was built for — the `lucos_repos` C4 trust-edge work (lucas42/lucos_repos#426) needs to see the shape of production, including which system addresses which, without reading its secrets.
+
+So `ORIGIN_*` values are returned to a `creds:metadata:read` grant. This is a genuine **projection change**, not merely a label: the metadata tier currently blanks `Value` on the paths that emit it, and `ORIGIN_*` must be exempted from that blanking while `KEY_*`, sharing an emit path, must not be. An implementation that treats "same loop, same tier" as the default gets this wrong silently and in the more dangerous direction only if the exemption is written too broadly — so the exemption must key on the credential type, not on the loop.
+
+Raised by `lucos-security` during review of this ADR.
 
 ### 3. `configy_sync` writes a new per-system, per-environment config value: `INTERNAL_ORIGIN`
 
@@ -138,7 +148,7 @@ lucas42/lucos_creds#470 stated that this proposal "doesn't retire the scope trap
 
 Per convention these are raised as GitHub issues before this ADR is complete; the coordinator has asked to commission implementation tickets separately once this ADR settles, so they are enumerated here rather than filed from this branch:
 
-1. **Implement decisions 1–7** in `lucos_creds` (`sync.py` `INTERNAL_ORIGIN`; `storage.go` emit, type, prefix reservation; `updateLinkedCredential` validation step 4).
+1. **Implement decisions 1–7** in `lucos_creds` (`sync.py` `INTERNAL_ORIGIN`; `storage.go` emit, type, prefix reservation; `updateLinkedCredential` validation step 4). **Includes decision 2a's metadata-tier projection** — the value-blanking exemption must key on the `origin` credential type, so that `ORIGIN_*` is readable at `creds:metadata:read` while `KEY_*`, emitted from the same loop, stays secret-tier.
 2. **Add `extra_hosts: host.docker.internal:host-gateway`** to client compose files adopting `ORIGIN_*` (contingent on decision 4 surviving review).
 3. **Audit linked credentials predating ADR-0003's dev→prod guard** for non-read-only dev→prod scopes.
 4. **Clean up malformed credential-store entries** `set lucos_notes` and `write lucos_notes`, and reconcile store systems absent from configy.
