@@ -1,7 +1,6 @@
 import express from 'express';
 import fs from 'fs';
 import { createAuthMiddleware, csrfMiddleware } from './auth.js';
-import { normalizeLineEndings } from './lineEndings.js';
 import { execFile as execFileCb } from 'child_process';
 import { promisify } from 'util';
 const execFile = promisify(execFileCb);
@@ -156,15 +155,8 @@ app.get('/update-simple-credential', catchErrors(async (req, res) => {
 }));
 app.post('/update-simple-credential', catchErrors(async (req, res) => {
 	const { system, environment, key } = req.body;
-	// The browser CRLF-normalizes textarea line breaks on form submission
-	// (spec-mandated HTML behaviour, not a client bug) — undo that here so a
-	// multi-line value resaved through this web form unmodified doesn't come
-	// back corrupted. This is specifically compensating for the web form's
-	// textarea encoding, not asserting anything about credential content in
-	// general — the underlying store stays a byte-transparent secret store;
-	// this normalisation only applies to values that passed through this
-	// particular HTML textarea submission path. See lineEndings.js.
-	const value = req.body.value ? normalizeLineEndings(req.body.value) : req.body.value;
+	// Browsers CRLF-normalize textarea line breaks on submission (WHATWG spec) — undo that here.
+	const value = req.body.value ? req.body.value.replace(/\r\n/g, '\n').replace(/\r/g, '\n') : req.body.value;
 	assertSafeIdentifier(system, 'system');
 	assertSafeIdentifier(environment, 'environment');
 	assertSafeIdentifier(key, 'key');

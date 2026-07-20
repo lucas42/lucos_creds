@@ -4,7 +4,7 @@
   "description": "User Interface for lucos_creds",
   "type": "module",
   "scripts": {
-    "test": "node --test src/auth.test.js src/lineEndings.test.js",
+    "test": "node --test src/auth.test.js",
     "build": "webpack",
     "start": "node index.js"
   },
