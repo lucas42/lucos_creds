@@ -1,6 +1,5 @@
 /**
- * Normalize line endings to LF-only, but only for values that are already
- * PEM-armored (start with a "-----BEGIN " header).
+ * Normalize line endings to LF-only.
  *
  * HTML form submission (both application/x-www-form-urlencoded and
  * multipart/form-data) is spec-mandated to convert LF-only line breaks in a
@@ -12,36 +11,20 @@
  * every line break in the raw POST body, even though the textarea's own DOM
  * `.value` stays LF-only right up until submission.
  *
- * Practical effect: resaving any multi-line PEM credential (an SSH key, a TLS
- * cert) through the UI without touching it corrupts it with CRLF line
- * endings — see lucas42/lucos_creds#474 and lucas42/lucos_creds#476, the
- * ticket this function was added to fix.
+ * Practical effect: resaving any multi-line credential through the UI without
+ * touching it corrupts it with CRLF line endings — see lucas42/lucos_creds#474
+ * and lucas42/lucos_creds#476, the ticket this function was added to fix.
  *
- * Scoped deliberately, NOT applied to every simple credential value.
- * lucos_creds is a generic, byte-transparent secret store: neither the store
- * (server/src/storage.go's updateCredential only rejects reserved key-name
- * prefixes, not value content) nor generateEnvFile (which round-trips
- * whatever bytes it's given — see its own TestGenerateEnvFileMultilineValue)
- * validate or reject CR in an arbitrary credential's value. validateSshKey()
- * in index.js and the remote configy_sync startup guard are narrow,
- * consumer-side checks each service runs against its own specific env var at
- * its own startup — neither gates what this endpoint accepts on write for an
- * arbitrary system/environment/key triple. So normalizing unconditionally
- * would silently rewrite the bytes of some other system's credential that
- * happens to contain a legitimate CR, for no reason connected to the bug
- * being fixed. A PEM header is a reliable, content-based signal that this is
- * the kind of multi-line, wrapped-text value the browser's CRLF
- * normalization actually corrupts — CRLF vs LF is never semantically
- * meaningful inside PEM-armored text, only the base64/text content between
- * the markers is — so normalizing when we see one is safe on the value's own
- * terms, not because of a naming convention that could drift.
+ * Applied unconditionally to every value submitted through this form, per
+ * lucas42's call on #477 (PR discussion): the underlying lucos_creds store
+ * stays a byte-transparent generic secret store with no content validation —
+ * this function isn't asserting anything about what a credential's value is
+ * allowed to contain in general. It specifically compensates for a known,
+ * spec-mandated encoding step introduced by *this one HTML form*, for values
+ * that pass through *this one submission path*. A value written any other
+ * way (directly over SSH, scripted, etc.) is untouched by this function and
+ * keeps whatever bytes it was given.
  */
-const PEM_HEADER = /^-----BEGIN /;
-
-export function isPemArmored(value) {
-	return PEM_HEADER.test(value.trimStart());
-}
-
 export function normalizeLineEndings(value) {
 	return value.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 }
