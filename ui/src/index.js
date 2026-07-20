@@ -7,6 +7,11 @@ const execFile = promisify(execFileCb);
 const readFile = promisify(fs.readFile);
 const unlink = promisify(fs.unlink);
 
+// True only when this file is run directly (`node index.js`), not when
+// imported (e.g. by a test) — gates startup side effects below so the
+// module is safely importable without writing an SSH key or opening a port.
+const isMainModule = import.meta.url === `file://${process.argv[1]}`;
+
 const app = express();
 // Composition root: the one place a real aithne client is constructed for
 // this process (lucas42/lucos#268).
@@ -35,8 +40,15 @@ function validateSshKey(value, varName) {
 	if (!value.startsWith('-----BEGIN ')) throw new Error(`${varName} does not start with a PEM header`);
 	if (!value.trimEnd().endsWith('-----')) throw new Error(`${varName} does not end with a PEM footer`);
 }
-validateSshKey(process.env.UI_PRIVATE_SSH_KEY, 'UI_PRIVATE_SSH_KEY');
-fs.writeFileSync('/root/.ssh/id_ed25519', process.env.UI_PRIVATE_SSH_KEY);
+if (isMainModule) {
+	validateSshKey(process.env.UI_PRIVATE_SSH_KEY, 'UI_PRIVATE_SSH_KEY');
+	fs.writeFileSync('/root/.ssh/id_ed25519', process.env.UI_PRIVATE_SSH_KEY);
+}
+
+// Browsers CRLF-normalize textarea line breaks on submission (WHATWG spec) — undo that here.
+export function normalizeLineEndings(value) {
+	return value.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+}
 
 function assertSafeIdentifier(value, fieldName) {
 	if (value == null || value === '') throw new Error(`Invalid ${fieldName}: missing or empty`);
@@ -155,8 +167,7 @@ app.get('/update-simple-credential', catchErrors(async (req, res) => {
 }));
 app.post('/update-simple-credential', catchErrors(async (req, res) => {
 	const { system, environment, key } = req.body;
-	// Browsers CRLF-normalize textarea line breaks on submission (WHATWG spec) — undo that here.
-	const value = req.body.value ? req.body.value.replace(/\r\n/g, '\n').replace(/\r/g, '\n') : req.body.value;
+	const value = req.body.value ? normalizeLineEndings(req.body.value) : req.body.value;
 	assertSafeIdentifier(system, 'system');
 	assertSafeIdentifier(environment, 'environment');
 	assertSafeIdentifier(key, 'key');
@@ -308,9 +319,11 @@ app.post('/update-linked-credential', catchErrors(async (req, res) => {
 	res.redirect(303, `/system/${serversystem}/${serverenvironment}/CLIENT_KEYS`);
 }));
 
-app.listen(port, () => {
-	console.log(`UI listening on port ${port}`)
-});
+if (isMainModule) {
+	app.listen(port, () => {
+		console.log(`UI listening on port ${port}`)
+	});
+}
 
 // Wrapper for controller async functions which catches errors and sends them on to express' error handling
 function catchErrors(controllerFunc) {
