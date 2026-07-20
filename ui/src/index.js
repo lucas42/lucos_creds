@@ -1,6 +1,7 @@
 import express from 'express';
 import fs from 'fs';
 import { createAuthMiddleware, csrfMiddleware } from './auth.js';
+import { isPemArmored, normalizeLineEndings } from './lineEndings.js';
 import { execFile as execFileCb } from 'child_process';
 import { promisify } from 'util';
 const execFile = promisify(execFileCb);
@@ -154,7 +155,15 @@ app.get('/update-simple-credential', catchErrors(async (req, res) => {
 	});
 }));
 app.post('/update-simple-credential', catchErrors(async (req, res) => {
-	const { system, environment, key, value } = req.body;
+	const { system, environment, key } = req.body;
+	// The browser CRLF-normalizes textarea line breaks on form submission
+	// (spec-mandated, not a client bug) — undo that here so a PEM-armored
+	// multi-line value (SSH key, TLS cert) resaved unmodified doesn't come
+	// back corrupted. Scoped to PEM-shaped values only — lucos_creds is a
+	// generic secret store and an arbitrary credential's value is free to
+	// contain a legitimate CR. See lineEndings.js.
+	const rawValue = req.body.value;
+	const value = rawValue && isPemArmored(rawValue) ? normalizeLineEndings(rawValue) : rawValue;
 	assertSafeIdentifier(system, 'system');
 	assertSafeIdentifier(environment, 'environment');
 	assertSafeIdentifier(key, 'key');
