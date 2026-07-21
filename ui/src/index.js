@@ -154,10 +154,11 @@ app.get('/update-simple-credential', catchErrors(async (req, res) => {
 	});
 }));
 app.post('/update-simple-credential', catchErrors(async (req, res) => {
-	const { system, environment, key, value } = req.body;
+	const { system, environment, key, value: rawValue } = req.body;
 	assertSafeIdentifier(system, 'system');
 	assertSafeIdentifier(environment, 'environment');
 	assertSafeIdentifier(key, 'key');
+	const value = rawValue.replaceAll(/\r\n/g, '\n').replaceAll(/\r/g, '\n');
 	const params = new URLSearchParams({system, environment, key});
 	if (!value) { // Doing an update without a value causes a delete - check the user wants to do this by redirecting to the delete page instead
 		res.redirect(303, '/delete-simple-credential?'+params.toString());
