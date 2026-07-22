@@ -56,7 +56,9 @@ This **replaces** the accreted `case` guard in `startup.sh` and the divergent `v
 
 ### 3. The UI rejects a malformed value at paste time, with a message naming the fault
 
-When a human pastes a key into the credential UI, the UI validates it (post-normalisation, pre-store) and, on failure, returns a message naming *what* is wrong — not a generic error (user-facing rejection raised by `lucos-ux` during review). The Round 1 corruption entered through the UI silently; the person storing the key is the earliest and cheapest place to catch a bad one. A clear rejection there turns a 62-hour deploy-time mystery into an immediate paste-time correction.
+When a human pastes a key into the credential UI, the UI validates it (post-normalisation, pre-store) and, on failure, returns a message naming *what* is wrong — not a generic error (user-facing rejection raised by `lucos-ux` during review). For a human storing a key, the person at the keyboard is the earliest and cheapest place to catch a mistake, and a clear rejection there turns a would-be deploy-time mystery into an immediate paste-time correction.
+
+**Scope, precisely — this covers UI-originated writes only.** It is not what closes either of *this* incident's corruptions: Round 1's UI-origin CRLF is neutralised by decision 1 regardless of decision 3, and Round 2 was a scripted SSH-exec write (the same channel as the eventual fix), which never touches the UI. Automation and SSH-exec writes are covered by decisions 1 and 2, not this one. Decision 3's distinct value is narrower and still real: it catches the malformed-but-not-CRLF paste a human makes — the wrong key, a truncated copy, non-key text — at the moment of pasting rather than at the next deploy.
 
 ### 4. Write-time and transport-time hardening are complementary, and both are required
 
