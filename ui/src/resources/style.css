@@ -223,6 +223,45 @@ a.floating-nav {
 	text-shadow: 0 0 5px white;
 }
 
+.scope-field {
+	vertical-align: top;
+}
+.scope-picker {
+	display: inline-block;
+	max-height: 220px;
+	overflow-y: auto;
+	min-width: 230px;
+	border: solid 1px #555;
+	border-radius: 3px;
+	background: #ffffff55;
+	padding: 5px 8px;
+}
+.scope-option {
+	display: block;
+	font-weight: normal;
+	width: auto;
+	white-space: normal;
+	margin: 3px 0;
+}
+.scope-option input[type=checkbox] {
+	vertical-align: middle;
+}
+.scope-name {
+	font-family: "Courier New", monospace;
+	font-size: 0.9em;
+}
+.scope-comment {
+	display: block;
+	margin-left: 20px;
+	font-style: italic;
+	color: #222;
+	font-size: 12px;
+}
+.scope-legacy .scope-comment {
+	color: #900;
+	font-weight: bold;
+}
+
 .copy-button {
 	border: none;
 	background: none;
