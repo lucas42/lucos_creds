@@ -234,7 +234,9 @@ a.floating-nav {
 	background: #ffffff55;
 	padding: 5px 8px;
 }
-.scope-option {
+/* Overqualified to beat .entry-form .form-field label's specificity on
+   display/font-weight/width, which a plain .scope-option class loses to. */
+.entry-form .form-field label.scope-option {
 	display: block;
 	font-weight: normal;
 	width: auto;
@@ -248,14 +250,11 @@ a.floating-nav {
 	font-family: "Courier New", monospace;
 	font-size: 0.9em;
 }
-.scope-comment {
+.scope-legacy-warning {
 	display: block;
 	margin-left: 20px;
 	font-style: italic;
-	color: #222;
 	font-size: 12px;
-}
-.scope-legacy .scope-comment {
 	color: #900;
 	font-weight: bold;
 }
