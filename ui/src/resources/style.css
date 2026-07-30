@@ -223,6 +223,42 @@ a.floating-nav {
 	text-shadow: 0 0 5px white;
 }
 
+.scope-field {
+	vertical-align: top;
+}
+.scope-picker {
+	display: inline-block;
+	min-width: 230px;
+	border: solid 1px #555;
+	border-radius: 3px;
+	background: #ffffff55;
+	padding: 5px 8px;
+}
+/* Overqualified to beat .entry-form .form-field label's specificity on
+   display/font-weight/width, which a plain .scope-option class loses to. */
+.entry-form .form-field label.scope-option {
+	display: block;
+	font-weight: normal;
+	width: auto;
+	white-space: normal;
+	margin: 3px 0;
+}
+.scope-option input[type=checkbox] {
+	vertical-align: middle;
+}
+.scope-name {
+	font-family: "Courier New", monospace;
+	font-size: 0.9em;
+}
+.scope-legacy-warning {
+	display: block;
+	margin-left: 20px;
+	font-style: italic;
+	font-size: 12px;
+	color: #900;
+	font-weight: bold;
+}
+
 .copy-button {
 	border: none;
 	background: none;

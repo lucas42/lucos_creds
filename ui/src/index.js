@@ -1,6 +1,7 @@
 import express from 'express';
 import fs from 'fs';
 import { createAuthMiddleware, csrfMiddleware } from './auth.js';
+import { knownScopes } from './scopes.js';
 import { execFile as execFileCb } from 'child_process';
 import { promisify } from 'util';
 const execFile = promisify(execFileCb);
@@ -261,6 +262,11 @@ app.get('/update-linked-credential', catchErrors(async (req, res) => {
 		if (!serverenvironment) serverenvironment = existingCredential.server_environment;
 	}
 	scope = scope || '';
+	const selectedScopes = scope.split(',').map(s => s.trim()).filter(Boolean);
+	const knownScopeNames = new Set(knownScopes.map(({ scope: s }) => s));
+	// Scopes already on the credential that have since fallen out of the vocabulary —
+	// kept selectable (and pre-checked) rather than silently dropped from the form.
+	const legacyScopes = selectedScopes.filter(s => !knownScopeNames.has(s));
 	const availableSystems = Object.keys(systems);
 	availableSystems.sort();
 	const availableEnvironments = Object.keys(environments);
@@ -272,12 +278,18 @@ app.get('/update-linked-credential', catchErrors(async (req, res) => {
 		clientenvironment,
 		serversystem,
 		serverenvironment,
-		credentialScope: scope,
+		knownScopes,
+		selectedScopes,
+		legacyScopes,
 		error,
 	});
 }));
 app.post('/update-linked-credential', catchErrors(async (req, res) => {
-	const { clientsystem, clientenvironment, serversystem, serverenvironment, scope } = req.body;
+	const { clientsystem, clientenvironment, serversystem, serverenvironment } = req.body;
+	// Checkbox inputs share the "scope" name: express gives an array for 2+ checked,
+	// a bare string for exactly 1, and undefined for none — normalise to a comma list.
+	const scopeValues = req.body.scope;
+	const scope = Array.isArray(scopeValues) ? scopeValues.join(',') : (scopeValues || '');
 	if (!clientsystem || !clientenvironment || !serversystem || !serverenvironment) {
 		const params = new URLSearchParams(req.body);
 		params.append('error', "All fields are required");

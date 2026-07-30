@@ -1,0 +1,16 @@
+# Test stub — NOT the real scope vocabulary.
+#
+# This file exists only so scopes.js has something to parse when the UI runs
+# outside Docker (e.g. `node --test`). It contains clearly fake scopes that
+# are never valid in production.
+#
+# At Docker build time, `COPY --from=scopes /scopes.yaml ./scopes.yaml`
+# (Dockerfile) overwrites this file with the real vocabulary from
+# lucas42/lucos_auth_scopes. The deployed image therefore always serves the
+# real vocabulary; this stub is never baked into a deployed image.
+#
+# Mirrors server/src/scopes.yaml — see server/src/scopes.go for the Go-side
+# equivalent of this pattern.
+scopes:
+  - test-only:read   # stub scope for local/unit-test use only
+  - test-only:write  # stub scope for local/unit-test use only
