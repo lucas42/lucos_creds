@@ -34,7 +34,7 @@ The `startup.sh` guard set has grown by accretion (the `~` guard is a fossil of 
 
 ### Scope note — this is not the whole of write-time validation
 
-lucas42/lucos_creds#473 (as scope-corrected) covers *identifier* validation plus a cheap, type-agnostic rejection of bare CR / control characters at the **store write boundary** — which catches Round 1's CRLF at the point of the bad write, needs no knowledge of the value's type, and is complementary to this ADR. This ADR does not duplicate that; it addresses transport integrity and *material* validity, which #473 deliberately does not.
+lucas42/lucos_creds#473 (as scope-corrected) covers *identifier* validation plus a cheap, type-agnostic rejection of bare CR / control characters at the **store write boundary**, needing no knowledge of the value's type. This ADR does not duplicate it; it addresses transport integrity and *material* validity, which #473 deliberately does not. Note that the boundary between the two shifts once decision 1 lands — see decision 4.
 
 ## Decision
 
@@ -60,9 +60,13 @@ When a human pastes a key into the credential UI, the UI validates it (post-norm
 
 **Scope, precisely — this covers UI-originated writes only.** It is not what closes either of *this* incident's corruptions: Round 1's UI-origin CRLF is neutralised by decision 1 regardless of decision 3, and Round 2 was a scripted SSH-exec write (the same channel as the eventual fix), which never touches the UI. Automation and SSH-exec writes are covered by decisions 1 and 2, not this one. Decision 3's distinct value is narrower and still real: it catches the malformed-but-not-CRLF paste a human makes — the wrong key, a truncated copy, non-key text — at the moment of pasting rather than at the next deploy.
 
-### 4. Write-time and transport-time hardening are complementary, and both are required
+### 4. Write-time and transport-time hardening are complementary — but not orthogonal for the base64'd class
 
-Stated explicitly so it is not mistaken for redundancy: the store-boundary CR/control-char reject (#473), base64 transport (decision 1), and point-of-use material validation (decision 2) address **different** points on the path. #473 stops a bad value entering the store; base64 stops a good value being corrupted in transit; point-of-use validation stops a bad-but-well-framed value being used. Removing any one re-opens a gap the others do not cover. In particular, neither base64 nor #473 makes decision 2 redundant — a value that is faithfully transported and free of control characters can still be cryptographically invalid.
+The store-boundary CR/control-char reject (lucas42/lucos_creds#473), base64 transport (decision 1) and point-of-use material validation (decision 2) address different points on the path: #473 stops a bad value entering the store; base64 stops a good value being corrupted in transit; point-of-use validation stops a bad-but-well-framed value being used. Neither base64 nor #473 makes decision 2 redundant — a value that is faithfully transported and free of control characters can still be cryptographically invalid.
+
+**One overlap has to be stated rather than glossed, because it would be easy to read this ADR as establishing three orthogonal layers.** For the base64-at-rest class specifically, decision 1 **supersedes** #473's control-character reject rather than complementing it: the store only ever sees base64, so a value carrying a bare CR — including this incident's Round 1 — passes that reject unexamined. Decision 3 already says as much from the other direction ("Round 1's UI-origin CRLF is neutralised by decision 1 regardless of decision 3"). So for key-typed secrets, write-time control-character detection is deliberately traded for use-time material detection under decision 2: stronger in what it catches, later in when it catches it. #473's reject remains load-bearing for every value *outside* the base64'd class, which is nearly the whole store.
+
+The consequence to carry forward is that **the base64'd class should stay as narrow as its definition requires**. Every value added to it moves that value's failure detection from write-time to the next deploy.
 
 ### 5. Migration is tolerant-read, not flag-day
 
