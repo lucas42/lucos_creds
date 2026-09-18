@@ -29,6 +29,24 @@ app.set('trust proxy', 1);
 // Expose AITHNE_ORIGIN to all EJS templates for the navbar keepalive attribute.
 app.locals.AITHNE_ORIGIN = process.env.AITHNE_ORIGIN ?? 'https://aithne.l42.eu';
 
+// Icons for the button set, as inline SVG (lucas42/lucos_creds#385 — the previous
+// unicode glyphs came from Unicode blocks with poor Android font coverage). Decorative:
+// each button also carries a visible or visually-hidden text label, so the SVGs are
+// aria-hidden and contribute nothing to the accessible name.
+const ICON_PATHS = {
+	eye: '<path d="M1 12S5 5 12 5s11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/>',
+	pencil: '<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
+	trash: '<path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/>',
+	refresh: '<path d="M4 12a8 8 0 0 1 14.5-4.5"/><path d="M20 12a8 8 0 0 1-14.5 4.5"/><path d="M18 4v4h-4"/><path d="M6 20v-4h4"/>',
+	plus: '<path d="M12 5v14"/><path d="M5 12h14"/>',
+	link: '<path d="M9 15l6-6"/><path d="M9.5 6.5l1-1a4 4 0 0 1 5.5 5.5l-1 1"/><path d="M14.5 17.5l-1 1a4 4 0 0 1-5.5-5.5l1-1"/>',
+};
+app.locals.icon = function(name) {
+	const paths = ICON_PATHS[name];
+	if (!paths) throw new Error(`Unknown icon: ${name}`);
+	return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${paths}</svg>`;
+};
+
 function validateSshKey(value, varName) {
 	if (!value) throw new Error(`${varName} is empty`);
 	if (value.includes('\r')) throw new Error(`${varName} contains carriage returns — re-store with LF-only line endings`);
