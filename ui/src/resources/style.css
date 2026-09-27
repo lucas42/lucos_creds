@@ -59,13 +59,15 @@ a:hover {
 	vertical-align: middle;
 }
 .inline-button svg {
-	width: 1em;
-	height: 1em;
+	width: 1.2em;
+	height: 1.2em;
 	vertical-align: middle;
 }
 .inline-button svg + span:not(.sr-only) {
 	margin-left: 0.3em;
 }
+/* "sr" = screen reader: visually hides text while keeping it in the
+   accessibility tree, so screen readers still announce it. */
 .sr-only {
 	position: absolute;
 	width: 1px;

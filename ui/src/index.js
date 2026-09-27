@@ -44,7 +44,7 @@ const ICON_PATHS = {
 app.locals.icon = function(name) {
 	const paths = ICON_PATHS[name];
 	if (!paths) throw new Error(`Unknown icon: ${name}`);
-	return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${paths}</svg>`;
+	return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${paths}</svg>`;
 };
 
 function validateSshKey(value, varName) {
