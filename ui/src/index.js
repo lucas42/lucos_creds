@@ -39,7 +39,7 @@ const ICON_PATHS = {
 	trash: '<path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/>',
 	refresh: '<path d="M4 12a8 8 0 0 1 14.5-4.5"/><path d="M20 12a8 8 0 0 1-14.5 4.5"/><path d="M18 4v4h-4"/><path d="M6 20v-4h4"/>',
 	plus: '<path d="M12 5v14"/><path d="M5 12h14"/>',
-	link: '<path d="M9 15l6-6"/><path d="M9.5 6.5l1-1a4 4 0 0 1 5.5 5.5l-1 1"/><path d="M14.5 17.5l-1 1a4 4 0 0 1-5.5-5.5l1-1"/>',
+	link: '<path d="M10 14.5l4-4"/><path d="M11.5 7.5l1-1a4 4 0 0 1 5.5 5.5l-1 1"/><path d="M12.5 17.5l-1 1a4 4 0 0 1-5.5-5.5l1-1"/>',
 };
 app.locals.icon = function(name) {
 	const paths = ICON_PATHS[name];
