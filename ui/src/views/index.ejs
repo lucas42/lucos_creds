@@ -14,10 +14,10 @@
 		<main>
 			<div class="floating-button-set">
 				<form action="/update-simple-credential" method="get" class="inline-form">
-					<input type="submit" title="Add Simple Credential" value="＋" class="inline-button add-button" />
+					<button type="submit" title="Add Simple Credential" class="inline-button add-button"><%- icon('plus') %><span class="sr-only">Add Simple Credential</span></button>
 				</form>
 				<form action="/update-linked-credential" method="get" class="inline-form">
-					<input type="submit" title="Add Linked Credential" value="⫘" class="inline-button refresh-button" />
+					<button type="submit" title="Add Linked Credential" class="inline-button refresh-button"><%- icon('link') %><span class="sr-only">Add Linked Credential</span></button>
 				</form>
 			</div>
 			<% for(const systemid in systems) {

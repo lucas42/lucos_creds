@@ -25,15 +25,15 @@
 			<div class="button-set">
 				<form action="/update-simple-credential" method="get" class="inline-form">
 					<input type="hidden" name="system" value="<%= system %>" />
-					<input type="submit" title="Add Simple Credential" value="＋ Simple" class="inline-button add-button" />
+					<button type="submit" title="Add Simple Credential" class="inline-button add-button"><%- icon('plus') %><span>Add Simple</span></button>
 				</form>
 				<form action="/update-linked-credential" method="get" class="inline-form">
 					<input type="hidden" name="clientsystem" value="<%= system %>" />
-					<input type="submit" title="Add Linked Credential where this system is the client" value="＋ Client" class="inline-button add-button" />
+					<button type="submit" title="Add Linked Credential where this system is the client" class="inline-button add-button"><%- icon('plus') %><span>Add Client</span></button>
 				</form>
 				<form action="/update-linked-credential" method="get" class="inline-form">
 					<input type="hidden" name="serversystem" value="<%= system %>" />
-					<input type="submit" title="Add Linked Credential where this system is the server" value="＋ Server" class="inline-button add-button" />
+					<button type="submit" title="Add Linked Credential where this system is the server" class="inline-button add-button"><%- icon('plus') %><span>Add Server</span></button>
 				</form>
 			</div>
 		</main>
