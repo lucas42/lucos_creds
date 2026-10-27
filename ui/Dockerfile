@@ -1,7 +1,7 @@
 # Vocabulary stage: canonical scope vocabulary from lucos_auth_scopes.
 # Named stage so Dependabot can track the tag + digest. Pinned to the same
 # version as server/Dockerfile's "scopes" stage — keep both pins in sync.
-FROM lucas42/lucos_auth_scopes:1.3.9@sha256:cb178a80dd7f4751dbcb5bda0543134dc353f76ec471b05b5d4a9465c261dee5 AS scopes
+FROM lucas42/lucos_auth_scopes:1.3.10@sha256:1f2cbf64ef8629d4fe82d56455d5a33d9ed960d864ce580118000ff972284c0a AS scopes
 
 FROM node:26-alpine
 ARG VERSION
